@@ -109,7 +109,7 @@ test('world recovery recreates a deleted vault without starting a stale live cal
 });
 test('off-grid directory updates do not reveal a newly introduced contact',async()=>{
   const f=await fixture(),r=f.runtime;await f.request(f.alice,'power',{actorId:'PC-A',enabled:false});await r.drain();
-  await f.request(f.gm,'contact-save',{id:'new',name:'Newly introduced source',grants:['PC-A']});await r.drain();assert.equal(r.directory('PC-A').contacts.length,0);
+  await f.request(f.gm,'contact-save',{id:'new',name:'Newly introduced source',grants:['PC-A']});await r.drain();assert.equal(r.deliveredDirectory('PC-A').contacts.length,0);assert.equal(r.directory('PC-A').contacts.length,1);
   await f.request(f.alice,'power',{actorId:'PC-A',enabled:true});await r.drain();assert.equal(r.directory('PC-A').contacts[0].name,'Newly introduced source');
 });
 test('a call already seen by a PC closes visibly when that PC goes off-grid',async()=>{

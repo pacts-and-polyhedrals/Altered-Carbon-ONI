@@ -1,13 +1,13 @@
 {
   "module": "altered-carbon-oni",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "date": "2026-10-13",
   "system_source": "altered-carbon-rpg 2.4.9 supplied by user",
   "adventure_source": "cold-storage 1.9.0 supplied by user",
   "foundry_api_target": "14",
-  "syntax_validation": "passed, 10 ES modules",
+  "syntax_validation": "passed, 12 ES modules",
   "automated_tests": {
-    "passed": 65,
+    "passed": 75,
     "failed": 0,
     "skipped": 0
   },
@@ -34,12 +34,43 @@
     "Native journal guide creation and permission data in a simulated document fixture",
     "Cancellation, per-file unread notices, source reference jobs and vault capacity",
     "Install manifest remains prominent in README and points to the real repository",
-    "Saved native delivery errors and retry without source-file duplication"
+    "Saved native delivery errors and retry without source-file duplication",
+    "Broad default Owner permissions do not broadcast private archives",
+    "Header actor and GM dossier stay aligned",
+    "Actual Anik 17-file release leaves seven other dossiers unchanged",
+    "One coalesced archive reference per PC; missing-key dossiers do not create file jobs",
+    "Targeted rebuild resumes only the selected PC; repair preserves cancellations",
+    "Legacy per-file job migration preserves ordinary messages and sealed knowledge",
+    "Initialized primary player receives without waiting for an additional owner",
+    "Concurrent decrypt deduplication and stale vault update prevention",
+    "New player cannot save private transmissions they never received",
+    "Real browser expanded details, inner / outer scroll, idle render suppression, form drafts, search focus and narrow viewport"
   ],
-  "browser_rendering": "not completed; available Playwright install had no usable browser executable and browser download was empty",
+  "browser_rendering": {
+    "status": "passed",
+    "browser": "Chromium 153.0.8010.0",
+    "environment": "real browser DOM and WebCrypto; simulated Foundry documents and ApplicationV2 part replacement",
+    "checks": {
+      "browser": "153.0.8010.0",
+      "actorAndDossierStayAligned": true,
+      "externalActorAndDossierStayAligned": true,
+      "anikFiles": 37,
+      "anikLifetimeAndRelationshipFiles": 17,
+      "historicalContacts": 11,
+      "currentContacts": 43,
+      "otherPCsUnchanged": true,
+      "expandedDetailsPreserved": true,
+      "innerAndOuterScrollPreserved": true,
+      "idleRefreshDoesNotRender": true,
+      "draftsAndSearchFocusPreserved": true,
+      "realRecipientDecryption": true,
+      "mobileOverflow": 0,
+      "pageErrors": []
+    }
+  },
   "licensed_foundry_runtime": "not available",
   "live_foundry_multiplayer": "not run",
-  "release_status": "implementation complete; native browser / Foundry v14 validation still required",
+  "release_status": "packaged bug-fix update; licensed native Foundry / Forge multiplayer validation remains outstanding",
   "verified_manifest_version": null,
   "source_coverage": {
     "prepared_pcs": 8,
@@ -52,9 +83,9 @@
     "gm_guide_pages": 12
   },
   "archive_capacity": {
-    "stress_state_bytes": 491596,
+    "stress_state_bytes": 404035,
     "limit_bytes": 700000,
-    "research_delivery_intents": 303,
+    "archive_delivery_intents": 8,
     "file_bodies_duplicated_in_outbox": false
   }
 }

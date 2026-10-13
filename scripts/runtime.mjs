@@ -3,6 +3,7 @@ import {EndpointKeys} from './crypto.mjs';
 import {operationRoll,oniItems,hasImplant,sourceJSON} from './bridge.mjs';
 import {DOSSIER_VERSION,SCENE_RELEASES,dossierState,sourceId,buildColdDossiers,dossierForActor,projectAssignedContact,setContactRelease,researchRecord,researchGrant,projectResearch,diagnosticReport} from './dossiers.mjs';
 import {ensureGuides} from './guide.mjs';
+import {ARCHIVE_TRANSPORT,endpointUsers,endpointReady,publicEndpoint,archiveProjection,archiveSignature,releasedResearch,historicalCards,migrateArchiveTransport} from './archive.mjs';
 
 const uid=()=>foundry.utils.randomID(16);
 const content='<p class="ac-oni-envelope">ONI · encrypted transmission</p>';
@@ -19,11 +20,11 @@ export function registerSettings() {
 }
 /** One elected GM serializes world changes. Transport is signed, encrypted ChatMessages. */
 export class ONIRuntime {
-  constructor() { this.cache=new Map();this.decoded=new Map();this.chain=Promise.resolve();this.ui=null;this.lastError='';this.ready=false;this.notified=new Set(); }
+  constructor() { this.cache=new Map();this.decoded=new Map();this.chain=Promise.resolve();this.ui=null;this.lastError='';this.ready=false;this.notified=new Set();this.uiVersion=0; }
   get users() { return game.users.contents||[...game.users]; }
   get actors() { return game.actors.contents||[...game.actors]; }
   get gms() { return this.users.filter(u=>u.isGM&&u.getFlag(ID,'publicKey')?.kid); }
-  get ownedActors() { return this.actors.filter(a=>['character','npc','ai'].includes(a.type)&&owns(a,game.user)); }
+  get ownedActors() { return this.actors.filter(a=>['character','npc','ai'].includes(a.type)&&this.canUseEndpoint(a)); }
   get authority() {
     const id=game.settings.get(ID,'vaultId'), doc=id?game.messages.get(id):null;
     return this.gms.filter(u=>u.active&&(!id||doc?.getFlag(ID,'sealed')?.keys?.[u.id]?.kid===u.getFlag(ID,'publicKey').kid)).sort((a,b)=>a.id.localeCompare(b.id))[0]||null;
@@ -45,9 +46,9 @@ export class ONIRuntime {
       if(this.isAuthority)await this.saveState(this.state); // Wrap newly registered co-GM keys.
       Hooks.on('createChatMessage',m=>{this.onMessage(m).catch(e=>this.error(e));});
       Hooks.on('updateChatMessage',m=>{this.onMessage(m,true).catch(e=>this.error(e));});
-      Hooks.on('deleteChatMessage',m=>{this.cache.delete(m.id);this.decoded.delete(m.id);this.refresh();});
+      Hooks.on('deleteChatMessage',m=>{this.cache.delete(m.id);this.decoded.delete(m.id);this.uiVersion++;if(m.id===game.settings.get(ID,'vaultId')){this.ready=false;this.lastError='The ONI vault was deleted. Restore your ONI world export in Endpoint.';}this.refresh();});
       Hooks.on('userConnected',()=>{this.automationDirty=true;this.schedule();});
-      Hooks.on('updateUser',()=>{this.automationDirty=true;this.schedule();this.refresh();});
+      Hooks.on('updateUser',()=>{this.automationDirty=true;this.uiVersion++;this.schedule();this.refresh();});
       for(const name of ['Actor','Item']){
         Hooks.on(`create${name}`,(doc,options,userId)=>this.worldChanged(doc,userId));
         Hooks.on(`update${name}`,(doc,changes,options,userId)=>this.worldChanged(doc,userId));
@@ -74,18 +75,31 @@ export class ONIRuntime {
   refresh() { this.ui?.refresh?.();Hooks.callAll('acONIChanged',this); }
   async decode(m,force=false) {
     const e=m.getFlag?.(ID,'sealed');if(!e||!this.keys?.bundle)return null;
-    const tag=e.signature;
+    const tag=e.signature,slot=`${m.id}:${tag}:${this.keys.bundle.kid}`;
+    this.opening??=new Map();if(this.opening.has(slot))return this.opening.get(slot);
     if(!force&&this.cache.get(m.id)===tag)return this.decoded.get(m.id)||null;
-    this.cache.set(m.id,tag);
-    const author=typeof m.author==='object'?m.author:game.users.get(m.user?.id||m.user);
-    try {
-      const payload=await this.keys.open(e,author);
-      if(!payload||payload.schema!==SCHEMA||!['request','packet','vault'].includes(payload.kind)||!payload.data||typeof payload.data!=='object'){this.decoded.delete(m.id);return null;}
-      if(payload.kind==='request'&&(typeof payload.data.action!=='string'||!payload.data.data||typeof payload.data.data!=='object'))return null;
-      if(payload.kind==='packet'&&!Array.isArray(payload.actorIds))return null;
-      if(payload.kind!=='request'&&!author?.isGM){this.decoded.delete(m.id);return null;}
-      const record={message:m,id:m.id,timestamp:m.timestamp,author,payload};this.decoded.set(m.id,record);return record;
-    } catch(error) { this.decoded.delete(m.id);console.warn('ONI | Cannot decrypt or verify record',m.id,error.message);return null; }
+    const pending=(async()=>{
+      const author=typeof m.author==='object'?m.author:game.users.get(m.user?.id||m.user);
+      try {
+        const payload=await this.keys.open(e,author);
+        // A slower old decrypt must never replace a newer vault or packet.
+        if(m.getFlag?.(ID,'sealed')?.signature!==tag)return this.decode(m,true);
+        this.cache.set(m.id,tag);
+        if(!payload||payload.schema!==SCHEMA||!['request','packet','vault'].includes(payload.kind)||!payload.data||typeof payload.data!=='object'){this.decoded.delete(m.id);return null;}
+        if(payload.kind==='request'&&(typeof payload.data.action!=='string'||!payload.data.data||typeof payload.data.data!=='object'))return null;
+        if(payload.kind==='packet'&&!Array.isArray(payload.actorIds))return null;
+        if(payload.kind!=='request'&&!author?.isGM){this.decoded.delete(m.id);return null;}
+        const previous=this.decoded.get(m.id);
+        const record={message:m,id:m.id,timestamp:m.timestamp,author,payload};this.decoded.set(m.id,record);
+        if(previous?.payload.eventId!==payload.eventId||previous?.messageSignature!==tag)this.uiVersion++;
+        record.messageSignature=tag;return record;
+      } catch(error) {
+        if(m.getFlag?.(ID,'sealed')?.signature!==tag)return this.decode(m,true);
+        this.cache.set(m.id,tag);this.decoded.delete(m.id);console.warn('ONI | Cannot decrypt or verify record',m.id,error.message);return null;
+      }
+    })();
+    this.opening.set(slot,pending);
+    try{return await pending;}finally{if(this.opening.get(slot)===pending)this.opening.delete(slot);}
   }
   async onMessage(m,force=false) {
     const r=await this.decode(m,force);if(!r)return;
@@ -95,7 +109,7 @@ export class ONIRuntime {
     }
     else if(r.payload.kind==='packet'&&!force&&!this.notified.has(r.payload.eventId)) {
       this.notified.add(r.payload.eventId);
-      const mine=r.payload.actorIds?.some(id=>owns(game.actors.get(id),game.user))||r.payload.data.recipientUserId===game.user.id;
+      const mine=r.payload.actorIds?.some(id=>this.canUseEndpoint(game.actors.get(id)))||r.payload.data.recipientUserId===game.user.id;
       if(!game.user.isGM&&mine&&r.payload.data.incoming!==false){
         if(!game.settings.get(ID,'dnd'))this.ui?.notify?.(r);
       }
@@ -137,6 +151,7 @@ export class ONIRuntime {
   async drain() {
     if(!this.isAuthority)return;
     let state=this.state;
+    if(migrateArchiveTransport(state))await this.saveState(state);
     if(this.automationDirty){
       this.automationDirty=false;const before=JSON.stringify(state);
       const reveals=[...(this.revealActors||[])];this.revealActors?.clear();
@@ -150,8 +165,8 @@ export class ONIRuntime {
     for(const r of requests){
       if(!this.isAuthority)return;
       state=this.state;
-      try { await this.apply(state,r);state.processed[r.id]={status:'accepted',at:Date.now()}; }
-      catch(e) { state=this.state;state.processed[r.id]={status:'rejected',at:Date.now()};
+      try { const result=await this.apply(state,r);state.processed[r.id]={status:'accepted',at:Date.now(),...(result?{result}: {})}; }
+      catch(e) { state=this.state;state.processed[r.id]={status:'rejected',at:Date.now(),error:text(e.message,800)};
         this.enqueue(state,[],{type:'receipt',title:'Transmission rejected',body:e.message,recipientUserId:r.author.id,incoming:true},[r.author.id]);
       }
       await this.saveState(state);
@@ -187,12 +202,14 @@ export class ONIRuntime {
     }
   }
   snapshot(state,actorId) {
-    const ep=endpoint(state,actorId);
-    const granted=state.contacts.filter(c=>c.grants.includes(actorId));
-    const contacts=ep.enabled&&!ep.jammed?granted.map(c=>projectAssignedContact(state,c,actorId)):this.directory(actorId).contacts.filter(c=>granted.some(g=>g.id===c.id));
-    this.enqueue(state,[actorId],{type:'directory',actorId,contacts,
-      endpoint:{enabled:ep.enabled,jammed:ep.jammed,clearance:ep.clearance,trace:ep.trace,masked:ep.masked,access:ep.access||{}},incoming:false});
-    const d=dossierForActor(state,actorId);if(d)d.directorySignature=this.directorySignature(state,actorId);
+    const actor=game.actors.get(actorId);if(!actor)return;
+    const d=this.ensureActorDossier(state,actor),ep=endpoint(state,actorId);
+    if(ep.enabled&&!ep.jammed)this.queueArchives(state,{dossierIds:[d.id]});
+    else if(endpointReady(state,actor,this.users)){
+      const granted=state.contacts.filter(c=>c.grants.includes(actorId));
+      this.enqueue(state,[actorId],{type:'directory',actorId,contacts:this.deliveredDirectory(actorId).contacts.filter(c=>granted.some(g=>g.id===c.id)),endpoint:publicEndpoint(state,actorId),incoming:false});
+    }
+    d.directorySignature=this.directorySignature(state,actorId);
   }
   snapshots(state) { for(const a of this.actors.filter(a=>a.type==='character'&&owners(a,this.users).length))this.snapshot(state,a.id); }
   async flush() {
@@ -201,6 +218,12 @@ export class ONIRuntime {
       if(!this.isAuthority)return;
       if(job.deliverAt>Date.now())continue;
       let data=job.data,grant;
+      if(data.type==='archive-ref'){
+        const d=state.dossiers[data.dossierId],actor=game.actors.get(job.actorIds[0]);
+        if(!d||d.actorId!==actor?.id||job.actorIds.length!==1||d.archivePaused){state.outbox=state.outbox.filter(o=>o.id!==job.id);changed++;continue;}
+        if(data.signature!==archiveSignature(state,actor,this.users)){state.outbox=state.outbox.filter(o=>o.id!==job.id);this.queueArchives(state,{dossierIds:[d.id],notify:job.data.incoming,destination:job.data.destination});changed++;continue;}
+        data={...archiveProjection(state,actor.id),title:job.data.title,body:`The published ONI archive for ${d.displayName||d.name} has been updated.`,incoming:job.data.incoming,destination:job.data.destination,sequence:job.data.sequence};
+      }
       if(data.type==='research-ref'){
         grant=state.dossiers[data.dossierId]?.research[data.researchId];const file=state.research.find(r=>r.id===data.researchId);
         if(!grant?.released||!file){state.outbox=state.outbox.filter(o=>o.id!==job.id);changed++;continue;}
@@ -215,10 +238,12 @@ export class ONIRuntime {
       if(job.data.type!=='directory'&&!knownCallEnd&&job.actorIds.some(id=>!canReceive(state,id)))continue;
       const already=[...this.decoded.values()].some(r=>r.payload.kind==='packet'&&r.payload.eventId===job.id);
       if(!already){
-        const ids=unique([...(job.userIds||job.actorIds.flatMap(id=>owners(game.actors.get(id),this.users))),...this.gms.map(u=>u.id)]);
+        const playerIds=job.actorIds.flatMap(id=>endpointUsers(state,game.actors.get(id),this.users)).filter(id=>game.users.get(id)?.getFlag(ID,'publicKey')?.kid);
+        const ids=unique([...(job.userIds||playerIds),...this.gms.map(u=>u.id)]);
         // An actor with no player owner remains queued, rather than becoming a GM-only delivery.
         if(!job.userIds&&!ids.some(id=>!game.users.get(id)?.isGM))continue;
         if(ids.some(id=>!game.users.get(id)?.getFlag(ID,'publicKey')?.kid))continue;
+        if(['directory','archive'].includes(data.type))data.recipientUserIds=playerIds;
         try { await this.post('packet',data,ids,{eventId:job.id,actorIds:job.actorIds}); }
         catch(e){
           const current=state.outbox.find(o=>o.id===job.id);if(current&&current.lastError!==e.message){current.lastError=text(e.message,600);changed++;}
@@ -226,6 +251,8 @@ export class ONIRuntime {
         }
       }
       if(grant&&state.dossiers[job.data.dossierId]?.research[job.data.researchId])state.dossiers[job.data.dossierId].research[job.data.researchId].delivery=job.data.signature;
+      if(job.data.type==='archive-ref'&&state.dossiers[job.data.dossierId])state.dossiers[job.data.dossierId].archiveDelivery=job.data.signature;
+      if(data.evidence&&!Array.isArray(data.evidence))for(const id of job.actorIds){const d=dossierForActor(state,id);if(d&&state.evidence.some(e=>e.id===data.evidence.id))(d.evidenceGrants??={})[data.evidence.id]={verdict:data.evidence.verdict||'Unverified'};}
       if(job.data.type==='evidence-ref'&&state.dossiers[job.data.dossierId])state.dossiers[job.data.dossierId].evidenceDelivery[job.data.evidenceId]=job.data.signature;
       state.outbox=state.outbox.filter(o=>o.id!==job.id);changed++;
       // Event IDs make crash retries safe; checkpoint batches avoid resealing the
@@ -234,8 +261,8 @@ export class ONIRuntime {
     }
     if(changed)await this.saveState(state);
   }
-  actorFor(data,user) {
-    const actor=game.actors.get(data.actorId);if(!owns(actor,user))throw new Error('You do not own that ONI endpoint.');return actor;
+  actorFor(data,user,state=this.state) {
+    const actor=game.actors.get(data.actorId);if(!actor||!owns(actor,user)||(!user.isGM&&!endpointUsers(state,actor,this.users).includes(user.id)))throw new Error('This private ONI belongs to a different PC. Assign the correct player in PC dossiers.');return actor;
   }
   checkOnline(state,actor) {
     const ep=assertOnline(state,actor.id);
@@ -244,19 +271,20 @@ export class ONIRuntime {
   async apply(state,record) {
     const {action,data}=record.payload.data,user=record.author,rid=record.id;
     if(!data||typeof data!=='object')throw new Error('Malformed request.');
-    const gmOnly=new Set(['contact-save','evidence-save','remove','import-cold','sync-roster','dispatch','resolve','configure','cancel-job','gm-call','contact-release','research-release','research-save','release-lifetimes','scene-release','bind-actor','repair']);
+    const gmOnly=new Set(['contact-save','evidence-save','remove','import-cold','sync-roster','dispatch','resolve','configure','cancel-job','cancel-archive-jobs','gm-call','contact-release','release-contacts','research-release','research-save','release-lifetimes','scene-release','bind-actor','assign-player','rebuild-archive','repair']);
     if(gmOnly.has(action)&&!user.isGM)throw new Error('Only a GM can perform that action.');
-    if(action==='sync'){this.actorFor(data,user);this.snapshot(state,data.actorId);this.queueResearch(state);return;}
+    if(action==='sync'){const actor=this.actorFor(data,user,state),d=this.ensureActorDossier(state,actor);this.snapshot(state,data.actorId);this.queueResearch(state,{dossierIds:[d.id]});return;}
     if(action==='research-note'){
-      const actor=this.actorFor(data,user),d=this.ensureActorDossier(state,actor);
+      const actor=this.actorFor(data,user,state),d=this.ensureActorDossier(state,actor);
       let body=text(data.body,24000),title=text(data.title,160),source='Personal ONI note';
       if(data.packetId){
-        const packet=this.packets(actor.id).find(p=>p.id===data.packetId);if(!packet)throw new Error('That transmission is not available to this PC.');
+        const packet=this.packets(actor.id).find(p=>p.id===data.packetId);
+        if(!packet||(!user.isGM&&!packet.message.getFlag(ID,'sealed')?.keys?.[user.id]))throw new Error('That transmission is not available to this PC.');
         const p=packet.payload.data;body=[p.body,p.evidence?.body,p.research?.body].filter(Boolean).join('\n\n');title=p.title;source=`Saved transmission / ${p.from?.name||'ONI'}`;
       }
       if(!body.trim())throw new Error('Write a note or save a transmission with text.');
       const id=`note:${rid}`;this.upsert(state.research,researchRecord({title:title||'Personal research note',body,source,pcId:d.id,category:'Personal notes',status:'personal'},id));
-      researchGrant(d,id).released=true;this.queueResearch(state);return;
+      researchGrant(d,id).released=true;d.archivePaused=false;this.queueResearch(state,{dossierIds:[d.id]});return;
     }
     if(action==='bind-actor'){
       const d=state.dossiers[data.dossierId],actor=game.actors.get(data.bindActorId);if(!d||actor?.type!=='character')throw new Error('Choose a prepared PC and a character actor.');
@@ -265,20 +293,28 @@ export class ONIRuntime {
     }
     if(action==='contact-release'){
       const d=state.dossiers[data.dossierId];if(!d)throw new Error('Choose a PC dossier.');
-      setContactRelease(state,d,data.contactId,data.mode);if(d.actorId)this.snapshot(state,d.actorId);this.queueResearch(state,{notify:true});return;
+      if(data.actorId&&data.actorId!==d.actorId)throw new Error('The selected PC changed. Select the intended dossier again.');
+      setContactRelease(state,d,data.contactId,data.mode);d.archivePaused=false;this.queueResearch(state,{dossierIds:[d.id],notify:true,destination:'contacts'});return {name:d.displayName||d.name,section:'Contacts',dossierId:d.id};
+    }
+    if(action==='release-contacts'){
+      const d=state.dossiers[data.dossierId];if(!d)throw new Error('Choose a PC dossier.');
+      if(data.actorId&&data.actorId!==d.actorId)throw new Error('The selected PC changed. Select the intended dossier again.');
+      const rows=state.contacts.filter(c=>d.contacts[c.id]);for(const c of rows)setContactRelease(state,d,c.id,'release');
+      d.archivePaused=false;this.queueResearch(state,{dossierIds:[d.id],notify:true,destination:'contacts'});return {name:d.displayName||d.name,section:'Contacts',count:rows.length,dossierId:d.id};
     }
     if(action==='research-release'||action==='release-lifetimes'){
       const d=state.dossiers[data.dossierId];if(!d)throw new Error('Choose a PC dossier.');
       const ids=action==='release-lifetimes'?state.research.filter(r=>r.pcId===d.id&&['Past life','Historical contacts'].includes(r.category)).map(r=>r.id):[data.researchId];
-      for(const id of ids){if(!state.research.some(r=>r.id===id)||!d.research[id])throw new Error('That file is not assigned to this PC.');d.research[id].released=true;delete d.research[id].deliverySuppressed;}
-      this.queueResearch(state,{notify:true});return;
+      if(data.actorId&&data.actorId!==d.actorId)throw new Error('The selected PC changed. Select the intended dossier again.');
+      for(const id of ids){if(!state.research.some(r=>r.id===id)||!d.research[id])throw new Error('That file is not assigned to this PC.');d.research[id].released=true;d.research[id].deliveryPaused=false;delete d.research[id].deliverySuppressed;}
+      d.archivePaused=false;this.queueResearch(state,{dossierIds:[d.id],notify:true,destination:'research'});return {name:d.displayName||d.name,section:'Research and historical contacts',count:ids.length,dossierId:d.id};
     }
     if(action==='research-save'){
       const previous=state.research.find(r=>r.id===data.id),id=data.id||uid();
       const file=researchRecord({...previous,...data,sourceId:previous?.sourceId||data.sourceId,pcId:previous?.pcId||'',revision:(previous?.revision||0)+1},id);
       this.upsert(state.research,file);
       for(const dossierId of unique(data.dossierIds)){const d=state.dossiers[dossierId];if(!d)throw new Error('Choose valid PC dossiers.');researchGrant(d,id).released=data.release===true||d.research[id].released;}
-      this.queueResearch(state,{notify:true});return;
+      this.queueResearch(state,{dossierIds:unique(data.dossierIds),notify:true});return;
     }
     if(action==='scene-release'){
       const scene=SCENE_RELEASES.find(s=>s.id===data.sceneId);if(!scene)throw new Error('Choose a scene bundle.');
@@ -288,20 +324,38 @@ export class ONIRuntime {
         for(const cid of scene.contacts)setContactRelease(state,d,`cold:${cid}`,'release');
         // Unbound PCs retain a small evidence intent until their actor is imported.
         d.pendingEvidence??=[];d.pendingEvidence=unique([...d.pendingEvidence,...scene.evidence.map(id=>`cold:${id}`)]);
+        d.evidenceGrants??={};for(const id of scene.evidence)d.evidenceGrants[`cold:${id}`]={verdict:'Unverified'};
+        d.archivePaused=false;
         d.sceneReleases.push(scene.id);
       }
-      this.syncDossiers(state);this.snapshots(state);this.queueResearch(state);return;
+      this.queueResearch(state,{dossierIds:unique(data.dossierIds),notify:true,destination:'evidence'});return;
+    }
+    if(action==='assign-player'){
+      const d=state.dossiers[data.dossierId],actor=game.actors.get(d?.actorId),player=game.users.get(data.playerUserId);
+      if(!d||!actor||!player||player.isGM)throw new Error('Choose the bound PC and its player.');
+      if(data.actorId&&data.actorId!==d.actorId)throw new Error('The selected PC changed. Select the intended dossier again.');
+      if(!owns(actor,player)){if(!actor.update)throw new Error('Set this player to Owner on the actor.');await actor.update({[`ownership.${player.id}`]:3});}
+      d.recipientUserIds=[player.id];d.archiveDelivery='';d.archivePaused=false;this.queueResearch(state,{dossierIds:[d.id]});return {name:d.displayName||d.name,player:player.name,section:'Private recipient',dossierId:d.id};
+    }
+    if(action==='rebuild-archive'){
+      const d=state.dossiers[data.dossierId];if(!d)throw new Error('Choose one PC dossier.');
+      if(data.actorId&&data.actorId!==d.actorId)throw new Error('The selected PC changed. Select the intended dossier again.');
+      for(const g of Object.values(d.research))if(g.released){g.deliveryPaused=false;delete g.deliverySuppressed;}
+      for(const g of Object.values(d.evidenceGrants||{}))g.paused=false;
+      d.archivePaused=false;d.archiveEpoch=(d.archiveEpoch||0)+1;
+      state.outbox=state.outbox.filter(o=>o.data.dossierId!==d.id||!['archive-ref','research-ref','evidence-ref'].includes(o.data.type));
+      this.queueResearch(state,{dossierIds:[d.id],notify:true});return {name:d.displayName||d.name,section:'Rebuilt published archive',dossierId:d.id};
     }
     if(action==='repair'){await this.maintain(state,{force:true});this.lastError='';this.snapshots(state);this.queueResearch(state);return;}
     if(action==='power'){
-      const actor=this.actorFor(data,user),ep=endpoint(state,actor.id);ep.enabled=data.enabled===true;
+      const actor=this.actorFor(data,user,state),ep=endpoint(state,actor.id);ep.enabled=data.enabled===true;
       if(!ep.enabled)ep.shutdownItems=unique([...(ep.shutdownItems||[]),...oniItems(actor).filter(i=>i.system.active!==false).map(i=>i.id)]);
       state.actors[actor.id]=ep;this.snapshot(state,actor.id);
       if(!ep.enabled)for(const c of state.calls.filter(c=>c.actors.includes(actor.id)&&!TERMINAL.has(c.status))){c.status='ended';c.updatedAt=Date.now();this.callEvent(state,c,'Signal disconnected');}
       return;
     }
     if(action==='send'){
-      const actor=this.actorFor(data,user),ep=this.checkOnline(state,actor);
+      const actor=this.actorFor(data,user,state),ep=this.checkOnline(state,actor);
       const c=state.contacts.find(c=>c.id===data.contactId);if(!allowedContact(c,actor.id,user))throw new Error('That channel has not been released to this PC.');
       if(!['online','busy'].includes(c.availability))throw new Error(`${c.name}: channel ${c.availability}.`);
       if(ep.clearance<c.clearance&&Number(ep.access?.[c.id]||0)<c.clearance)throw new Error('This channel requires authorization. Request network access first.');
@@ -320,23 +374,23 @@ export class ONIRuntime {
       return;
     }
     if(action==='operation'){
-      const actor=this.actorFor(data,user);this.checkOnline(state,actor);
+      const actor=this.actorFor(data,user,state);this.checkOnline(state,actor);
       if(!OPS[data.op])throw new Error('Unknown operation.');
       if(data.op==='analyze'){
-        if(!this.actorEvidence(actor.id).some(e=>e.id===data.evidenceId)&&!user.isGM)throw new Error('That evidence has not been delivered to this endpoint.');
+        if(!this.actorEvidence(actor.id,{preview:false,userId:user.id}).some(e=>e.id===data.evidenceId)&&!user.isGM)throw new Error('That evidence has not been delivered to this endpoint.');
       } else if(data.contactId){const c=state.contacts.find(c=>c.id===data.contactId);if(!allowedContact(c,actor.id,user))throw new Error('Unknown channel.');}
       state.pending.push({id:rid,kind:'operation',actorId:actor.id,userId:user.id,contactId:text(data.contactId,100),evidenceId:text(data.evidenceId,100),op:data.op,body:text(data.body),createdAt:Date.now()});
       this.enqueue(state,[actor.id],{type:'receipt',title:`${OPS[data.op].name} requested`,body:'Awaiting GM adjudication.',incoming:false});return;
     }
     if(action==='forward'){
-      const actor=this.actorFor(data,user);this.checkOnline(state,actor);
-      const e=this.actorEvidence(actor.id).find(e=>e.id===data.evidenceId);if(!e)throw new Error('You do not have this evidence.');
+      const actor=this.actorFor(data,user,state);this.checkOnline(state,actor);
+      const e=this.actorEvidence(actor.id,{preview:user.isGM,userId:user.isGM?'':user.id}).find(e=>e.id===data.evidenceId);if(!e)throw new Error('You do not have this evidence.');
       const c=state.contacts.find(c=>c.id===data.contactId);if(!allowedContact(c,actor.id,user)||c.type!=='pc')throw new Error('Choose a released PC channel.');
       this.enqueue(state,[c.actorId],{type:'evidence',title:e.title,body:'Forwarded evidence',evidence:clone(e),from:{name:actor.name,id:`pc:${actor.id}`,portrait:safeActorImage(actor)},incoming:true});
       this.enqueue(state,[actor.id],{type:'receipt',title:'Evidence forwarded',body:`${e.title} → ${c.name}`,incoming:false});return;
     }
     if(action==='call-action'||action==='call-line'||action==='feed'){
-      const actor=this.actorFor(data,user);this.checkOnline(state,actor);
+      const actor=this.actorFor(data,user,state);this.checkOnline(state,actor);
       const c=state.calls.find(c=>c.id===data.callId);if(!c||!c.actors.includes(actor.id))throw new Error('You are not a participant in that call.');
       if(action==='call-action'){c.status=validTransition(c,data.action,actor.id);c.updatedAt=Date.now();this.callEvent(state,c,`Call ${c.status}`);return;}
       if(c.status!=='connected')throw new Error('Connect the call before transmitting.');
@@ -393,7 +447,13 @@ export class ONIRuntime {
       const job=state.outbox.find(o=>o.id===data.id),d=state.dossiers[job?.data.dossierId];
       if(d&&job.data.type==='research-ref')d.research[job.data.researchId].deliverySuppressed=job.data.signature;
       if(d&&job.data.type==='evidence-ref')(d.evidenceSuppressed??={})[job.data.evidenceId]=job.data.signature;
+      if(d&&job.data.type==='archive-ref')d.archivePaused=true;
       state.outbox=state.outbox.filter(o=>o.id!==data.id);return;
+    }
+    if(action==='cancel-archive-jobs'){
+      const ids=unique(data.dossierIds?.length?data.dossierIds:Object.keys(state.dossiers));
+      for(const id of ids)if(state.dossiers[id])state.dossiers[id].archivePaused=true;
+      state.outbox=state.outbox.filter(o=>!ids.includes(o.data.dossierId)||!['archive-ref','research-ref','evidence-ref'].includes(o.data.type));return;
     }
     if(action==='resolve'){await this.resolve(state,data);return;}
     throw new Error('Unsupported ONI action.');
@@ -504,11 +564,11 @@ export class ONIRuntime {
       let c=state.contacts.find(c=>c.id===id);
       if(!c){c=contactRecord({name:actor?.name||target.name,type:'pc',role:'Team ONI',actorId:actor?.id||'',portrait:safeActorImage(actor),address:`DHF / ${actor?.name||target.name}`,grants:[]},id);state.contacts.push(c);}
       c.actorId=actor?.id||'';c.name=actor?.name||target.name;if(actor)c.portrait=safeActorImage(actor);
-      const available=actor&&owners(actor,this.users).length&&actor.getFlag?.('cold-storage','selectionState')!=='reserve';
+      const available=actor&&actor.getFlag?.('cold-storage','selectionState')!=='reserve';
       for(const d of all){
         if(d.id===target.id)continue;
         const a=d.contacts[id]??={historicalNames:[],categories:[],sleeves:[],identity:false};
-        const receiver=game.actors.get(d.actorId),eligible=available&&receiver&&owners(receiver,this.users).length&&receiver.getFlag?.('cold-storage','selectionState')!=='reserve';
+        const receiver=game.actors.get(d.actorId),eligible=available&&receiver&&receiver.getFlag?.('cold-storage','selectionState')!=='reserve';
         if(eligible&&!d.blockedPeers.includes(id)){if(!a.current)a.autoPeer=true;a.current=true;c.grants=unique([...c.grants,d.actorId]);}
         else if(a.autoPeer){a.current=false;c.grants=c.grants.filter(id=>id!==d.actorId);}
       }
@@ -549,35 +609,33 @@ export class ONIRuntime {
     const s=JSON.stringify([endpoint(state,actorId),state.contacts.filter(c=>c.grants.includes(actorId)).map(c=>projectAssignedContact(state,c,actorId))]);
     let h=2166136261;for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);return `${this.recipientSignature(actorId)}|${h>>>0}`;
   }
-  queueResearch(state,{notify=false}={}) {
+  queueResearch(state,options={}) { this.queueArchives(state,options); }
+  queueEvidence(state,options={}) { this.queueArchives(state,options); }
+  queueArchives(state,{dossierIds=null,notify=false,destination='research'}={}) {
     dossierState(state);
+    const selected=dossierIds?new Set(dossierIds):null;
     for(const d of Object.values(state.dossiers)){
-      if(!game.actors.get(d.actorId))continue;
-      for(const [id,grant] of Object.entries(d.research)){
-        const file=state.research.find(r=>r.id===id);if(!grant.released||!file)continue;
-        const signature=`${this.recipientSignature(d.actorId)}|${file.revision}`;
-        if(grant.delivery===signature||grant.deliverySuppressed===signature)continue;
-        const old=state.outbox.find(o=>o.data.type==='research-ref'&&o.data.dossierId===d.id&&o.data.researchId===id);
-        if(old?.data.signature===signature)continue;
-        if(old)state.outbox=state.outbox.filter(o=>o.id!==old.id);
-        this.enqueue(state,[d.actorId],{type:'research-ref',dossierId:d.id,researchId:id,title:file.title,signature,incoming:notify&&!grant.silent});
-      }
+      if(selected&&!selected.has(d.id))continue;
+      const actor=game.actors.get(d.actorId);
+      if(!actor||d.archivePaused||!endpointReady(state,actor,this.users))continue;
+      const signature=archiveSignature(state,actor,this.users);
+      if(d.archiveDelivery===signature)continue;
+      const old=state.outbox.find(o=>o.data.type==='archive-ref'&&o.data.dossierId===d.id);
+      if(old?.data.signature===signature){if(notify){old.data.incoming=true;old.data.destination=destination;}continue;}
+      state.outbox=state.outbox.filter(o=>!(o.data.type==='archive-ref'&&o.data.dossierId===d.id));
+      this.enqueue(state,[actor.id],{type:'archive-ref',dossierId:d.id,signature,title:`ONI archive · ${d.displayName||d.name}`,incoming:notify,destination});
     }
   }
-  queueEvidence(state) {
-    for(const d of Object.values(state.dossiers||{})){
-      if(!game.actors.get(d.actorId))continue;d.evidenceDelivery??={};
-      for(const id of d.pendingEvidence||[]){
-        const file=state.evidence.find(e=>e.id===id);if(!file)continue;
-        const signature=`${this.recipientSignature(d.actorId)}|1`;if(d.evidenceDelivery[id]===signature||d.evidenceSuppressed?.[id]===signature)continue;
-        const old=state.outbox.find(o=>o.data.type==='evidence-ref'&&o.data.dossierId===d.id&&o.data.evidenceId===id);
-        if(old?.data.signature===signature)continue;if(old)state.outbox=state.outbox.filter(o=>o.id!==old.id);
-        this.enqueue(state,[d.actorId],{type:'evidence-ref',dossierId:d.id,evidenceId:id,title:file.title,signature,incoming:true});
-      }
-    }
+  archiveStatus(d,state=this.state) {
+    const actor=game.actors.get(d?.actorId);if(!actor)return 'Stored for this PC · awaiting actor';
+    const ids=endpointUsers(state,actor,this.users);
+    if(!ids.length)return 'Stored for this PC · select its player';
+    if(d.archivePaused)return 'Delivery paused · rebuild this PC’s archive to resume';
+    if(!endpointReady(state,actor,this.users))return 'Stored for this PC · player must connect once';
+    const ep=endpoint(state,actor.id);if(ep.enabled===false)return 'Stored for this PC · off-grid';if(ep.jammed)return 'Stored for this PC · signal blocked';
+    return d.archiveDelivery===archiveSignature(state,actor,this.users)?'Published to this PC’s ONI':'Ready to publish to this PC’s ONI';
   }
   async maintain(state,{force=false,revealActors=[]}={}) {
-    if(force)for(const d of Object.values(state.dossiers)){for(const g of Object.values(d.research))delete g.deliverySuppressed;d.evidenceSuppressed={};}
     state.guides={...state.guides,...await ensureGuides()};
     const hasCold=this.actors.some(a=>a.type==='character'&&/^PC0[1-8]$/.test(sourceId(a)));
     if(force||(game.settings.get(ID,'autoSetup')&&hasCold&&state.imports.cold?.version!==DOSSIER_VERSION))await this.importCold(state);
@@ -589,33 +647,53 @@ export class ONIRuntime {
     for(const id of job.actorIds){
       const actor=game.actors.get(id);if(!actor)return 'PC actor was deleted; bind the dossier to its replacement.';
       const ep=state.actors[id];if(job.data.type!=='directory'&&(ep?.enabled===false||ep?.jammed))return ep.jammed?'Signal blocked by GM.':'PC is off-grid.';
-      if(!owners(actor,this.users).length)return 'No player owner assigned.';
+      if(!endpointUsers(state,actor,this.users).length)return 'No private player assigned. Choose one in PC dossiers.';
     }
-    const ids=job.userIds||job.actorIds.flatMap(id=>owners(game.actors.get(id),this.users));
+    const ids=job.userIds||job.actorIds.flatMap(id=>endpointUsers(state,game.actors.get(id),this.users));
     const missing=ids.filter(id=>!game.users.get(id)?.getFlag(ID,'publicKey')?.kid);
-    if(missing.length)return `Waiting for endpoint keys: ${missing.map(id=>game.users.get(id)?.name||id).join(', ')}.`;
+    if(missing.length===ids.length&&missing.length)return `Waiting for endpoint keys: ${missing.map(id=>game.users.get(id)?.name||id).join(', ')}.`;
     return job.lastError?`Last delivery failed: ${job.lastError}`:'Ready for the next GM delivery cycle.';
   }
   diagnostics() {
     const state=this.state,guideIds=Object.values(state.guides).filter(id=>game.journal?.get(id));
     return diagnosticReport(state,{actors:this.actors,users:this.users,ready:this.ready,authority:this.authority,bytes:new TextEncoder().encode(JSON.stringify(state)).length,guideIds});
   }
+  canUseEndpoint(actor,user=game.user) {
+    if(!actor||!owns(actor,user))return false;if(user.isGM)return true;
+    if(owners(actor,this.users).includes(user.id))return true;
+    const record=[...this.decoded.values()].filter(r=>r.payload.kind==='packet'&&r.payload.actorIds?.includes(actor.id)&&r.payload.data.transportVersion===ARCHIVE_TRANSPORT&&r.payload.data.explicitRecipients)
+      .sort((a,b)=>(b.payload.data.sequence||0)-(a.payload.data.sequence||0))[0];
+    return Boolean(record?.payload.data.recipientUserIds?.includes(user.id));
+  }
+  actorRecords(actorId) {
+    if(!game.user.isGM&&!this.canUseEndpoint(game.actors.get(actorId)))return [];
+    return [...this.decoded.values()].filter(r=>r.payload.kind==='packet'&&(r.payload.actorIds.includes(actorId)||(r.payload.actorIds.length===0&&r.payload.data.recipientUserId===game.user.id)))
+      .sort((a,b)=>(b.payload.data.sequence||0)-(a.payload.data.sequence||0)||b.timestamp-a.timestamp);
+  }
+  deliveredDirectory(actorId) {
+    const rows=this.actorRecords(actorId).filter(r=>['directory','archive'].includes(r.payload.data.type)&&r.payload.data.actorId===actorId);
+    return rows[0]?.payload.data||{contacts:[],endpoint:{enabled:true,jammed:false,clearance:0,trace:0,masked:false,access:{}}};
+  }
   directory(actorId) {
-    if(!game.user.isGM&&!owns(game.actors.get(actorId),game.user))return {contacts:[],endpoint:{enabled:true,jammed:false,clearance:0,trace:0,masked:false,access:{}}};
-    const rows=[...this.decoded.values()].filter(r=>r.payload.kind==='packet'&&r.payload.data.type==='directory'&&r.payload.data.actorId===actorId);
-    return rows.sort((a,b)=>(b.payload.data.sequence||0)-(a.payload.data.sequence||0)||b.timestamp-a.timestamp)[0]?.payload.data||{contacts:[],endpoint:{enabled:true,jammed:false,clearance:0,trace:0,masked:false,access:{}}};
+    if(game.user.isGM&&this.ready){const state=this.state;return archiveProjection(state,actorId);}
+    return this.deliveredDirectory(actorId);
   }
   packets(actorId) {
-    if(!game.user.isGM&&!owns(game.actors.get(actorId),game.user))return [];
-    return [...this.decoded.values()].filter(r=>r.payload.kind==='packet'&&(r.payload.actorIds.includes(actorId)||(r.payload.actorIds.length===0&&r.payload.data.recipientUserId===game.user.id))&&r.payload.data.type!=='directory')
-      .sort((a,b)=>b.timestamp-a.timestamp||b.id.localeCompare(a.id));
+    return this.actorRecords(actorId).filter(r=>r.payload.data.type!=='directory'&&(r.payload.data.type!=='archive'||r.payload.data.incoming===true));
   }
-  actorEvidence(actorId) {
-    const result=new Map();for(const r of this.packets(actorId)){const e=r.payload.data.evidence;if(e&&!result.has(e.id))result.set(e.id,e);}return [...result.values()];
+  actorEvidence(actorId,{preview=true,userId=''}={}) {
+    const result=new Map();
+    if(preview&&game.user.isGM&&this.ready)for(const e of archiveProjection(this.state,actorId).evidence)result.set(e.id,e);
+    for(const r of this.actorRecords(actorId)){if(userId&&!r.message.getFlag(ID,'sealed')?.keys?.[userId])continue;const data=r.payload.data;for(const e of [...(data.evidence&&!Array.isArray(data.evidence)?[data.evidence]:[]),...(data.type==='archive'?data.evidence||[]:[])])if(e&&!result.has(e.id))result.set(e.id,e);}
+    return [...result.values()];
   }
   actorResearch(actorId) {
-    const result=new Map();for(const r of this.packets(actorId).sort((a,b)=>(b.payload.data.sequence||0)-(a.payload.data.sequence||0))){const file=r.payload.data.research;if(file&&!result.has(file.id))result.set(file.id,file);}return [...result.values()];
+    const result=new Map();
+    if(game.user.isGM&&this.ready){const d=dossierForActor(this.state,actorId);for(const f of releasedResearch(this.state,d))result.set(f.id,f);}
+    for(const r of this.actorRecords(actorId)){const data=r.payload.data;for(const file of [...(data.research&&!Array.isArray(data.research)?[data.research]:[]),...(data.type==='archive'?data.research||[]:[])])if(file&&!result.has(file.id))result.set(file.id,file);}
+    return [...result.values()];
   }
+  historicalContacts(actorId) { return historicalCards(this.actorResearch(actorId)); }
   calls(actorId) {
     const result=new Map();for(const r of this.packets(actorId).sort((a,b)=>(b.payload.data.sequence||0)-(a.payload.data.sequence||0))){const c=r.payload.data.call;if(c&&!result.has(c.id))result.set(c.id,c);}return [...result.values()];
   }
@@ -624,7 +702,7 @@ export class ONIRuntime {
   }
   async markFileRead(actorId,kind,fileId) {
     if(!['research','evidence'].includes(kind))return;
-    const ids=this.packets(actorId).filter(r=>r.payload.data[kind]?.id===fileId).map(r=>r.id);
+    const ids=this.packets(actorId).filter(r=>{const file=r.payload.data[kind];return file?.id===fileId||(Array.isArray(file)&&file.some(f=>f.id===fileId));}).map(r=>r.id);
     if(!ids.length)return;const read=game.user.getFlag(ID,'readIds')||[];
     await game.user.setFlag(ID,'readIds',unique([...ids,...read]).slice(0,1500));this.refresh();
   }
@@ -639,9 +717,9 @@ export class ONIRuntime {
     if(this.authority&&this.authority.id!==game.user.id)throw new Error('The active ONI GM must perform the restore.');
     const state=initialState();
     state.contacts=backup.state.contacts.map(c=>contactRecord(c,c.id));state.evidence=backup.state.evidence.map(e=>evidenceRecord(e,e.id));
-    state.dossiers=clone(backup.state.dossiers||{});state.research=(backup.state.research||[]).map(r=>researchRecord(r,r.id));state.imports=clone(backup.state.imports||{});state.guides=clone(backup.state.guides||{});
+    state.archiveTransport=backup.state.archiveTransport||1;state.dossiers=clone(backup.state.dossiers||{});state.research=(backup.state.research||[]).map(r=>researchRecord(r,r.id));state.imports=clone(backup.state.imports||{});state.guides=clone(backup.state.guides||{});
     if(state.research.length>2000||Object.keys(state.dossiers).length>100)throw new Error('This backup exceeds the ONI dossier limits.');
-    for(const d of Object.values(state.dossiers)){for(const g of Object.values(d.research||{}))g.delivery='';d.directorySignature='';d.evidenceDelivery={};}
+    for(const d of Object.values(state.dossiers)){for(const g of Object.values(d.research||{}))g.delivery='';d.archiveDelivery='';d.directorySignature='';d.evidenceDelivery={};}
     state.actors=clone(backup.state.actors||{});state.processed=clone(backup.state.processed||{});state.eventSequence=Number(backup.state.eventSequence)||0;
     state.pending=clone(backup.state.pending||[]);state.outbox=clone(backup.state.outbox||[]);
     // Live calls cannot be reanimated from an old backup. Retain their history as ended.

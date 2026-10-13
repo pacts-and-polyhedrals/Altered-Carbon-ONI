@@ -1,10 +1,14 @@
 # First-world validation
 
-Run this in a backup copy of the world using Foundry 14 and your exact Forge build. Automated tests do not certify the native UI or server permission behavior.
+Run this in a backup copy of the world using Foundry 14 and your exact Forge build. Unit and real Chromium regressions cover the module with simulated Foundry documents; native UI integration and live multiplayer still need this check.
 
 1. Enable ONI and connect one GM and two different player accounts in separate browsers. Give each player ownership of one character and open the eye button. Export all three endpoint-key backups.
 2. Confirm the eye tool is present under token controls for each account, and on the owned token HUD. Confirm Alt+O opens the same application. Check resizing and both Foundry themes.
 3. Import Cold Storage with ONI enabled. Wait for automatic preparation. Confirm all eight named dossiers, reserve / unowned records, teammate channels, 177 research files, and both guide journals. Release one NPC to Player A from PC dossiers; B must not receive it. Release history separately, then verify the identity link. Each stage must disclose only that stage's information.
+   - Choose Anik in the header, then in PC dossiers; both selectors must follow each other. Check his private player. Even with default Owner permission on every actor, only that player receives his private release.
+   - Release his past lives: expect 6 lifetime files and 11 historical-contact files, 37 total Research files including the 20 starter files. Other PCs retain their original libraries.
+   - Check Contacts → Previous Lives, filter Allies / Enemies, expand a card and wait through two delivery cycles. The card and scroll position must stay put. Verify current channels appear separately and handouts appear in Evidence.
+   - Put Anik off-grid, rebuild his archive, then pause it from Outbox. Safe repair must preserve the pause. Rebuild Anik only and reconnect; it must deliver once without resuming another paused PC.
 4. Create a forgery with GM notes and a red-herring truth label. Deliver it to A. Confirm A sees its intended title / content and “Unverified”; B receives nothing. Verify the ONI flag contains only ciphertext, wrapped keys and signature metadata.
 5. Send a PC-to-PC message. Confirm the recipient notification, unread count and correct actor endpoint. Open it and mark it read. Refresh the recipient page and confirm the file remains.
 6. Start a GM-to-A video call. A answers; the GM sends NPC dialogue and an image. Confirm both call-state transitions and the image. End the call. Repeat with decline and an unanswered call.

@@ -1,21 +1,21 @@
-# ONI workflow diagnostics — v1.1.0
+# ONI workflow diagnostics — v1.2.0
 
-This review used the supplied Altered Carbon RPG 2.4.9 system and Cold Storage 1.9.0 source data. It covers import structure, release workflow, privacy, repeat safety, delivery and UI output. It does not certify live Foundry / Forge browser behavior.
+This review reproduced the 1.1.0 recipient, outbox, archive-section and list-reset defects using the supplied Altered Carbon RPG 2.4.9 and Cold Storage 1.9.0 data. The published runtime matched the previous supplied build. Verification includes real Chromium DOM and WebCrypto with simulated Foundry documents; a licensed Foundry / Forge multiplayer session was unavailable.
 
-| Finding in v1.0.0 | Implemented change |
+| Finding in v1.1.0 | Implemented change |
 | --- | --- |
-| Import populated one global directory and left every NPC grant empty. | Eight complete per-PC dossiers with all potential adventure channels and source-backed historical relationships. |
-| Roster sync was a separate manual step and rebuilt PC entries. | Automatic stable actor binding and owned, active teammate channels; explicit hides persist. |
-| No lifetime research archive existed. | 177 prepared research files, including every supplied lifetime and relationship, plus personal knowledge and saved transmissions. |
-| Contact grant editing required repeated checkbox forms. | A named PC selector, historical-name search, direct release buttons, per-file release and bulk lifetime release. |
-| Contact recognition could reveal too much at once. | Separate current channel, historical file and verified identity releases. Disputed claims retain their labels. |
-| Repeating scene delivery could duplicate evidence. | Nine source-chapter bundles tracked independently for every PC. |
-| Unowned PCs could not be prepared for later players. | Unbound and reserve dossiers keep assignments and release intents until binding and ownership. |
-| Ownership / browser-key changes needed manual refresh. | Automatic released-library resealing and directory refresh for current owners. |
-| Outbox displayed only a generic waiting message. | Specific scheduling, deleted actor, ownership, missing key, off-grid and jam reasons. |
-| Full research deliveries could duplicate large payloads in the vault. | Small reference jobs; shared primers stored once; directory jobs coalesce; delivery acknowledgements checkpoint in batches of 12. |
-| No in-world instructions or diagnostic view existed. | Eight-page player guide, twelve-page private GM guide, exported diagnostic report and additive repair. |
-| The publishing helper could replace the documented manifest URL. | Canonical raw manifest remains prominent in README and stable for main or version-pinned downloads. |
+| Broad default Owner permissions treated every user as a private recipient. | Assigned characters and explicit ownership determine private recipients; a per-PC player picker provides an exact override. Encryption includes only eligible initialized recipients and registered GMs. |
+| Releasing one dossier traversed unrelated unfinished libraries. | Release actions queue only their selected dossier. Unrelated lifetime and NPC grants remain unchanged; background starter synchronization stays silent. |
+| The header actor and dossier selector could describe different PCs. | Both selectors stay aligned; native actor IDs optionally guard against stale requests. Scope and actual private recipients are visible. |
+| Research required one queued delivery per file and could wait on an uninitialized additional owner. | One coalesced archive per initialized PC; missing keys leave released data stored in the dossier. A ready primary player can receive immediately. |
+| GM Contacts / Research depended on successful delivery to a player. | GM views preview canonical published data immediately. Player views continue to require actual private delivery. |
+| Historical files never appeared as a contact section. | Contacts has Current Channels and Previous Lives, searchable category views and full Research links. |
+| Periodic DOM replacement reset expanded clues and list scrolling. | Capture and restore details, inner / outer scroll, focus and dirty drafts; avoid idle rerenders and defer updates while editing. |
+| Concurrent native hooks raced decrypts; old decrypts could overwrite new state. | Shared in-flight decrypt promises and signature rechecks keep the newest state. |
+| Cancelled file jobs could be regenerated during repair. | Persistent archive pauses survive repair. Targeted rebuild deliberately resumes only one PC's released collection. |
+| Scene recipient defaults selected the entire roster. | Start with the currently selected PC checked; additional recipients require deliberate selection. |
+| A newly assigned player could request saving a packet decrypted only by the GM. | Saving requires that player's key to be an actual recipient of the original transmission. |
+| Instructions described the previous queue mechanics. | Upgrade the existing 20-page journals and document private routing, correct destinations, pauses and Anik recovery. |
 
 ## Source coverage
 
@@ -37,10 +37,12 @@ The potential-contact pool contains the 20 authored NPCs, 6 factions, 3 Benefact
 
 ## Verification and practical limits
 
-The automated suite covers cryptographic isolation, role / ownership checks, staged releases, all source links and lifetimes, off-grid archives, actor import after release, missing keys, changed owners, repeat imports, scene deduplication, GM relationship synchronization, world recovery, batch-checkpoint crash recovery, escaped UI output and actual system implant / deck contracts.
+All **75 automated tests pass**, with no skips, including actual supplied source and system contracts. Coverage includes cryptographic isolation, broad default ownership, staged releases, every source link / lifetime, off-grid archives, late actor import, missing keys, changed owners, repeat imports, scenes, GM reveals, recovery, native delivery failures, crash deduplication and native implant / deck mechanics.
 
-The full-source eight-PC stress fixture releases every assigned research file and creates 303 small delivery intents. Its GM state is approximately **480 KiB**, below the existing **700,000-byte** encrypted record limit. Native HTML-to-text conversion can produce slightly different whitespace sizes; Diagnostics reports the actual world size. Growing custom notes or catalogs still need capacity review. Existing delivered packets stay in world chat history, which must be backed up rather than cleared.
+The Chromium **153.0.8010.0** regression uses eight actual source PCs with deliberately permissive default ownership. It selects Anik through the real dropdowns, releases his lifetime / historical collection and current channels, then independently decrypts Anik's and Nia's player views. Anik receives **37 research files** (20 starters + 6 lifetimes + 11 relationship files), **11 historical-contact cards**, and **43 current channels** after the deliberate all-channel release. Nia retains 20 starters, 7 teammate channels and no historical files; the other six dossiers gain no lifetime or NPC grants. Expanded recognition clues, both scroll positions, historical enemy cards, edited drafts and search focus remain stable. Idle cycles do not rerender; a 650-pixel viewport has zero horizontal overflow and no browser errors.
 
-Automatic repair preserves edited ONI content and restores missing source records / guides. It cannot choose between duplicate source actors, assign a player by guesswork, generate another user's private key, undo prior knowledge, or infer that an NPC has been met without a GM disclosure. Scene bundles and the Cold Storage GM relationship dashboard supply those disclosures.
+The full-source eight-PC stress fixture releases every assigned research file and creates **8 archive references**, one per PC, replacing the previous 303 per-file intents. Its GM state is **404,035 bytes**, below the **700,000-byte** encrypted record limit. No archive bodies are duplicated in Outbox. Native HTML-to-text conversion can change whitespace size; Diagnostics reports actual world usage. Delivered versions remain in world chat history.
 
-Live v14 / Forge multiplayer and browser rendering remain untested. The manifest omits `compatibility.verified`; use [live-validation.md](live-validation.md) for the native checks. Journal document integration follows the [Foundry v14 JournalEntry API](https://foundryvtt.com/api/v14/classes/foundry.documents.JournalEntry.html), and document metadata follows the [DocumentStatsField API](https://foundryvtt.com/api/v14/classes/foundry.data.fields.DocumentStatsField.html).
+The upgrade retires obsolete directory / research / scene archive references without broadening sealed knowledge or resuming cancelled files. Ordinary message and call jobs remain. Automatic repair preserves edits and cancellations. To recover Anik after deleting his queued files, select PC07, check the exact player, and use **Rebuild Anik Rao’s released archive**. It resumes already released material for PC07 only. Current cards populate Contacts → Current Channels, relationship history populates Previous Lives and Research, lifetime records populate Research, and handouts populate Evidence. Rebuild does not verify identities or reveal sealed files.
+
+A live v14 / Forge multiplayer session remains untested. The real browser fixture simulates ApplicationV2 rendering, hooks and document permissions; it cannot certify native server behavior. The manifest omits `compatibility.verified`. Use [live-validation.md](live-validation.md) for those checks; [qa-report.json](qa-report.json) records completed verification and [../tests/browser/README.md](../tests/browser/README.md) describes the reproducible browser regression.

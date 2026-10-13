@@ -18,6 +18,6 @@ For an optional version-pinned GitHub release download:
 python3 publishing/build-release.py --repo pacts-and-polyhedrals/Altered-Carbon-ONI --release-download --source --output ./release
 ```
 
-Create tag `v1.1.0` and attach the generated `altered-carbon-oni-v1.1.0.zip` before updating the root manifest to that generated copy. The canonical manifest URL remains the raw `main/module.json` URL; only `download` changes to the versioned release asset. The README still explains the install manifest at the top.
+Create tag `v1.2.0` and attach the generated `altered-carbon-oni-v1.2.0.zip` before updating the root manifest to that generated copy. The canonical manifest URL remains the raw `main/module.json` URL; only `download` changes to the versioned release asset. The README still explains the install manifest at the top.
 
 The helper builds files without network access and does not publish to GitHub. For future updates, change the versions and documentation, run checks, build the archives and upload the complete matching source. A read-only GitHub connector cannot upload these changes.

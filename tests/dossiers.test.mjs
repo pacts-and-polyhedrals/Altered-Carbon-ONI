@@ -26,6 +26,7 @@ async function setup(){
   const s=r.state;await r.importCold(s);await r.saveState(s);return {...f,data};
 }
 async function submit(f,action,data,user=f.gm){const q=await f.request(user,action,data);await f.runtime.drain();return q;}
+async function asPlayer(f,user,read){const prior=game.user;try{game.user=user;const p=new ONIRuntime();p.ready=true;p.keys=f.keys.get(user.id);for(const m of game.messages.contents)await p.decode(m);return await read(p);}finally{game.user=prior;}}
 function relationItem(id,pcId,state,disputed=false){return {id,type:'relationship',system:{contactId:'C01',revealState:state},flags:{'cold-storage':{sourceId:`R-${pcId}-1-ally`,unverifiedArchive:disputed}},getFlag(s,k){return this.flags[s]?.[k];}};}
 
 test('preparation includes eight named dossiers, complete assignments and sealed lifetimes before actors exist',async()=>{
@@ -38,7 +39,7 @@ test('preparation includes eight named dossiers, complete assignments and sealed
 test('starter research is encrypted to the correct PC, excludes other private cards and hidden current links',async()=>{
   const f=await setup(),r=f.runtime;await r.drain();
   const files=r.actorResearch('PC-A');assert.equal(files.length,3);assert.ok(files.some(f=>f.body==='PRIVATE CARD PC01'));assert.ok(!JSON.stringify(files).includes('PRIVATE CARD PC02'));assert.ok(!JSON.stringify(files).includes('SECRET'));
-  const p=r.packets('PC-A').find(p=>p.payload.data.research?.body==='PRIVATE CARD PC01');
+  const p=r.actorRecords('PC-A').find(p=>p.payload.data.type==='archive'&&p.payload.data.research.some(f=>f.body==='PRIVATE CARD PC01'));
   assert.equal(await f.keys.get('bob').open(p.message.getFlag(ID,'sealed'),f.gm),null);assert.ok(!p.payload.data.incoming);
   assert.ok(!JSON.stringify(r.directory('PC-A')).includes('Historical 1'));
 });
@@ -66,11 +67,11 @@ test('released dossiers wait for actor import then automatically bind, preserve 
   const a=actor('newPC','eve');a.flags={'cold-storage':{sourceId:'PC03',selectionState:'active'}};game.actors.set(a.id,a);
   r.automationDirty=true;await r.drain();assert.equal(r.state.dossiers.PC03.actorId,'newPC');assert.ok(r.directory('newPC').contacts.some(c=>c.id==='cold:C01'));assert.ok(r.actorResearch('newPC').some(f=>f.body==='PRIVATE CARD PC03'));
 });
-test('research deliveries wait for missing keys, explain the reason, and replay without duplicates',async()=>{
+test('research stays stored without missing-key outbox clutter and publishes once after initialization',async()=>{
   const f=await setup(),r=f.runtime,pub=f.alice.getFlag(ID,'publicKey');delete f.alice.flags[ID].publicKey;
-  await r.drain();let jobs=r.state.outbox.filter(j=>j.actorIds.includes('PC-A')&&j.data.type==='research-ref');assert.equal(jobs.length,3);assert.match(r.deliveryReason(jobs[0]),/alice/);assert.equal(r.actorResearch('PC-A').length,0);
+  await r.drain();let jobs=r.state.outbox.filter(j=>j.actorIds.includes('PC-A'));assert.equal(jobs.length,0);assert.match(r.archiveStatus(r.state.dossiers.PC01),/connect once/);assert.equal(await asPlayer(f,f.alice,p=>p.actorResearch('PC-A').length),0);assert.equal(r.actorResearch('PC-A').length,3);
   f.alice.flags[ID].publicKey=pub;r.automationDirty=true;await r.drain();await r.drain();assert.equal(r.actorResearch('PC-A').length,3);
-  const rr=new ONIRuntime();rr.keys=f.keys.get('gm');rr.ready=true;for(const m of game.messages.contents)await rr.decode(m);await rr.drain();assert.equal(rr.packets('PC-A').filter(p=>p.payload.data.research).length,3);
+  const rr=new ONIRuntime();rr.keys=f.keys.get('gm');rr.ready=true;for(const m of game.messages.contents)await rr.decode(m);await rr.drain();assert.equal(rr.actorRecords('PC-A').filter(p=>p.payload.data.type==='archive').length,1);
 });
 test('lifetime bulk release retains disputed labels and never publishes present-day identity links',async()=>{
   const f=await setup(),r=f.runtime;await submit(f,'release-lifetimes',{dossierId:'PC01'});
@@ -78,7 +79,7 @@ test('lifetime bulk release retains disputed labels and never publishes present-
 });
 test('research remains cached off-grid while newly released archives wait for reconnection',async()=>{
   const f=await setup(),r=f.runtime;await r.drain();await submit(f,'power',{actorId:'PC-A',enabled:false},f.alice);
-  await submit(f,'release-lifetimes',{dossierId:'PC01'});assert.equal(r.actorResearch('PC-A').length,3);assert.ok(r.state.outbox.some(j=>j.data.type==='research-ref'&&j.actorIds.includes('PC-A')));
+  await submit(f,'release-lifetimes',{dossierId:'PC01'});assert.equal(await asPlayer(f,f.alice,p=>p.actorResearch('PC-A').length),3);assert.equal(r.actorResearch('PC-A').length,5);assert.ok(r.state.outbox.some(j=>j.data.type==='archive-ref'&&j.actorIds.includes('PC-A')));
   await submit(f,'power',{actorId:'PC-A',enabled:true},f.alice);assert.equal(r.actorResearch('PC-A').length,5);
 });
 test('scene bundles deliver only selected PCs, are repeat safe, and retain pending reserve discoveries',async()=>{
@@ -104,14 +105,14 @@ test('new GM dashboard relationship states synchronize but unchanged states pres
 });
 test('ownership changes automatically reseal the released research archive to its new owner',async()=>{
   const f=await setup(),r=f.runtime;await r.drain();f.pcA.ownership={default:0,eve:3};r.automationDirty=true;await r.drain();
-  const records=r.packets('PC-A').filter(p=>p.payload.data.research);assert.equal(records.length,6);
-  for(const p of records.slice(0,3)){assert.ok(p.message.getFlag(ID,'sealed').keys.eve);assert.ok(!p.message.getFlag(ID,'sealed').keys.alice);}
+  const records=r.actorRecords('PC-A').filter(p=>p.payload.data.type==='archive');assert.equal(records.length,2);
+  for(const p of records.slice(0,1)){assert.ok(p.message.getFlag(ID,'sealed').keys.eve);assert.ok(!p.message.getFlag(ID,'sealed').keys.alice);}
   game.user=f.alice;assert.equal(r.actorResearch('PC-A').length,0);game.user=f.gm;
 });
 test('PC dossier, scene, research and diagnostic controls render with all new sections and escape notes',async()=>{
   const f=await setup(),r=f.runtime;await r.drain();
   for(const section of ['pcs','scenes','research','diagnostics']){const html=renderView(r,{actorId:'PC-A',tab:'gm',gmSection:section,dossierId:'PC01'});assert.ok(html.includes('GM PRIVATE'));assert.ok(!html.includes('undefined'));}
-  const gmHtml=renderView(r,{actorId:'PC-A',tab:'gm',gmSection:'pcs',dossierId:'PC01'});assert.ok(gmHtml.includes('Current 20'));assert.ok(gmHtml.includes('Historical 1'));assert.ok(gmHtml.includes('Release channel'));assert.ok(gmHtml.includes('Release all past-life files'));
+  const gmHtml=renderView(r,{actorId:'PC-A',tab:'gm',gmSection:'pcs',dossierId:'PC01'});assert.ok(gmHtml.includes('Current 20'));assert.ok(gmHtml.includes('Historical 1'));assert.ok(gmHtml.includes('Release channel'));assert.ok(gmHtml.includes('Release past lives & historical contacts to this PC'));
   await submit(f,'research-note',{actorId:'PC-A',title:'<script>title</script>',body:'<img src=x onerror=alert(1)>'},f.alice);
   game.user=f.alice;const html=renderView(r,{actorId:'PC-A',tab:'research',researchSearch:'onerror'});assert.ok(html.includes('&lt;img'));assert.ok(!html.includes('<script>'));assert.ok(!html.includes('PRIVATE CARD PC02'));assert.ok(!html.includes('Historical 1'));game.user=f.gm;
 });
@@ -119,10 +120,10 @@ test('research projection excludes GM fields and source bindings',()=>{
   const p=projectResearch(researchRecord({title:'File',body:'Public',gmNotes:'SECRET',pcId:'PC01',sourceId:'SECRET-ID'},'f'));
   assert.ok(!JSON.stringify(p).includes('SECRET'));assert.equal(p.pcId,undefined);
 });
-test('cancelling queued research holds that delivery until an explicit file release or safe repair',async()=>{
+test('cancelling an archive remains paused through repair until a deliberate release',async()=>{
   const f=await setup(),r=f.runtime;await r.drain();await submit(f,'power',{actorId:'PC-A',enabled:false},f.alice);await submit(f,'research-release',{dossierId:'PC01',researchId:'cold:life:PC01-S1'});
-  const job=r.state.outbox.find(j=>j.data.researchId==='cold:life:PC01-S1');await submit(f,'cancel-job',{id:job.id});await r.drain();assert.ok(!r.state.outbox.some(j=>j.data.researchId==='cold:life:PC01-S1'));assert.equal(r.state.dossiers.PC01.research['cold:life:PC01-S1'].delivery,'');
-  await submit(f,'research-release',{dossierId:'PC01',researchId:'cold:life:PC01-S1'});assert.ok(r.state.outbox.some(j=>j.data.researchId==='cold:life:PC01-S1'));
+  const job=r.state.outbox.find(j=>j.data.type==='archive-ref'&&j.data.dossierId==='PC01');await submit(f,'cancel-job',{id:job.id});await submit(f,'repair',{});await r.drain();assert.ok(!r.state.outbox.some(j=>j.data.type==='archive-ref'&&j.data.dossierId==='PC01'));assert.equal(r.state.dossiers.PC01.archivePaused,true);
+  await submit(f,'research-release',{dossierId:'PC01',researchId:'cold:life:PC01-S1'});assert.ok(r.state.outbox.some(j=>j.data.type==='archive-ref'&&j.data.dossierId==='PC01'));
 });
 test('opening a research file clears that PC’s corresponding unread notices',async()=>{
   const f=await setup(),r=f.runtime;await r.drain();await submit(f,'research-release',{dossierId:'PC01',researchId:'cold:life:PC01-S1'});game.user=f.alice;
@@ -131,8 +132,8 @@ test('opening a research file clears that PC’s corresponding unread notices',a
 test('a native delivery failure remains queued with a useful diagnostic and retries without duplicates',async()=>{
   const f=await setup(),r=f.runtime,post=r.post.bind(r);let fail=true;
   r.post=async(kind,data,ids,options)=>{if(fail&&kind==='packet'&&data.research&&options.actorIds.includes('PC-A')){fail=false;throw new Error('Foundry rejected the private delivery');}return post(kind,data,ids,options);};
-  await r.flush();const job=r.state.outbox.find(j=>j.lastError);assert.ok(job);assert.match(r.deliveryReason(job),/Foundry rejected/);assert.equal(r.actorResearch('PC-A').length,2);
-  await r.drain();assert.equal(r.actorResearch('PC-A').length,3);assert.equal(r.packets('PC-A').filter(p=>p.payload.data.research).length,3);
+  await r.flush();const job=r.state.outbox.find(j=>j.lastError);assert.ok(job);assert.match(r.deliveryReason(job),/Foundry rejected/);assert.equal(await asPlayer(f,f.alice,p=>p.actorResearch('PC-A').length),0);assert.equal(r.actorResearch('PC-A').length,3);
+  await r.drain();assert.equal(await asPlayer(f,f.alice,p=>p.actorResearch('PC-A').length),3);assert.equal(r.actorRecords('PC-A').filter(p=>p.payload.data.type==='archive').length,1);
 });
 test('player-authored relationship changes cannot trigger automated identity releases',async()=>{
   const f=await setup(),r=f.runtime,i=relationItem('rel','PC02','confirmed');i.parent={documentName:'Actor',id:'PC-B'};i._stats={lastModifiedBy:'bob'};f.pcB.items.set(i.id,i);
@@ -154,10 +155,10 @@ test('GM world recovery retains dossier bindings, identity releases, custom rese
 });
 test('a crash during a batched archive checkpoint recovers without delivering source files twice',async()=>{
   const f=await setup(),r=f.runtime,save=r.saveState.bind(r);let failed=false;
-  r.saveState=async state=>{if(!failed&&r.packets('PC-A').some(p=>p.payload.data.research)){failed=true;throw new Error('Simulated checkpoint crash');}return save(state);};
+  r.saveState=async state=>{if(!failed&&r.actorRecords('PC-A').some(p=>p.payload.data.type==='archive')){failed=true;throw new Error('Simulated checkpoint crash');}return save(state);};
   await assert.rejects(()=>r.flush(),/checkpoint crash/);
   const rr=new ONIRuntime();rr.keys=f.keys.get('gm');rr.ready=true;for(const m of game.messages.contents)await rr.decode(m);await rr.drain();
-  assert.equal(rr.packets('PC-A').filter(p=>p.payload.data.research).length,3);assert.equal(rr.actorResearch('PC-A').length,3);assert.ok(!rr.state.outbox.some(j=>j.data.type==='research-ref'));
+  assert.equal(rr.actorRecords('PC-A').filter(p=>p.payload.data.type==='archive').length,1);assert.equal(rr.actorResearch('PC-A').length,3);assert.ok(!rr.state.outbox.some(j=>j.data.type==='archive-ref'));
 });
 test('in-world guides install once with player-safe and private GM ownership and retain additional pages',async()=>{
   const f=await fixture();game.journal=new Collection();let n=0,created=0;
@@ -182,7 +183,8 @@ test('full eight-PC archive and all lifetime-release intents fit the encrypted v
   const s=r.state;await r.importCold(s,{load:async n=>JSON.parse(fs.readFileSync(path.join(coldPath,'content-src',`${n}.json`),'utf8')),plain});
   for(const d of Object.values(s.dossiers)){for(const grant of Object.values(d.research))grant.released=true;}
   r.queueResearch(s,{notify:true});const bytes=new TextEncoder().encode(JSON.stringify(s)).length;assert.ok(bytes<600000,`${bytes} bytes`);
-  for(const job of s.outbox.filter(o=>o.data.type==='research-ref')){assert.equal(job.data.research,undefined);assert.equal(job.data.body,undefined);}
+  const archives=s.outbox.filter(o=>o.data.type==='archive-ref');assert.equal(archives.length,8);assert.equal(new Set(archives.map(j=>j.actorIds[0])).size,8);
+  for(const job of archives){assert.equal(job.data.research,undefined);assert.equal(job.data.body,undefined);}
   await r.saveState(s);assert.equal(Object.keys(r.state.dossiers).length,8);
-  console.log(JSON.stringify({coldStorageDiagnostics:{bytes,preparedResearchFiles:s.research.length,researchDeliveryIntents:s.outbox.filter(o=>o.data.type==='research-ref').length}}));
+  console.log(JSON.stringify({coldStorageDiagnostics:{bytes,preparedResearchFiles:s.research.length,archiveDeliveryIntents:archives.length}}));
 });

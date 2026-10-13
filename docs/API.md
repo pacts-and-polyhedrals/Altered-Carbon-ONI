@@ -48,6 +48,21 @@ await game.acONI.releaseResearch({
   dossierId: 'PC01', researchId: 'cold:life:PC01-S1'
 });
 
+// GM only: publish Anik's complete past-life and historical-contact collection.
+await game.acONI.releaseLifetimes({dossierId: 'PC07'});
+
+// GM only: deliberately reveal every prepared current channel for this PC.
+// This does not verify historical identity links.
+await game.acONI.releaseContacts({dossierId: 'PC07'});
+
+// GM only: restrict future private delivery to this player account.
+// Adds native Owner permission if needed; does not change User.character.
+await game.acONI.assignPlayer({dossierId: 'PC07', playerUserId: 'USER_ID'});
+
+// GM only: resume cancelled archive delivery and republish already released
+// contacts, research and evidence for Anik alone. Sealed files stay sealed.
+await game.acONI.rebuildArchive({dossierId: 'PC07'});
+
 // GM only: release a scene's contacts and evidence to selected PC dossiers.
 await game.acONI.releaseScene({sceneId: 'ward', dossierIds: ['PC01', 'PC02']});
 
@@ -60,6 +75,10 @@ await game.acONI.repair();
 ```
 
 Mutation methods return the native request document ID after durable submission. They do not promise that a GM has processed the request or an offline target has received it. Read methods return decrypted local data synchronously. Check the GM queue / outbox for delivery progress. Changes still pass author, role, actor-ownership, grant and online-state validation.
+
+For GM clients, `contacts()` and `research()` preview the published dossier immediately, even when player delivery is waiting. Players read only their decrypted deliveries. Contact history appears in the UI's Previous Lives view and in returned research files with category `Historical contacts`. Current callable cards remain the `contacts()` result.
+
+Bulk releases and rebuild accept an optional native `actorId` as a stale-selection guard. If provided it must match the dossier's bound actor. Archive synchronization coalesces to one pending reference per initialized recipient PC. Missing keys leave released content stored; cancel / repair does not silently resume a paused archive.
 
 Cold Storage `dossierId` values are the stable source IDs `PC01`–`PC08`, while `actorId` values are actual Foundry document IDs. Automatic import binds those two namespaces. Custom PC dossiers use `actor:ACTOR_ID`. Peer contacts use `team:PC01`–`team:PC08` for Cold Storage and `pc:ACTOR_ID` for custom actors. Prefer a contact ID read from the current directory over guessing it.
 

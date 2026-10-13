@@ -57,9 +57,17 @@ export function owns(actor, user) {
   if (typeof actor.testUserPermission==='function') return actor.testUserPermission(user,'OWNER');
   return Number(actor.ownership?.[user.id] ?? actor.ownership?.default ?? 0) >= 3;
 }
-export function owners(actor, users) { return users.filter(u=>!u.isGM && owns(actor,u)).map(u=>u.id); }
+export function assignedCharacterId(user) { return typeof user?.character==='string'?user.character.replace(/^Actor\./,''):user?.character?.id||''; }
+/** Private ONI routing ignores world-wide default Owner permissions. */
+export function owners(actor, users) {
+  if(!actor)return [];
+  const candidates=users.filter(u=>!u.isGM&&owns(actor,u));
+  const assigned=candidates.filter(u=>assignedCharacterId(u)===actor.id);
+  const explicit=candidates.filter(u=>Number(actor.ownership?.[u.id]??0)>=3&&!assignedCharacterId(u));
+  return unique([...assigned,...explicit].map(u=>u.id));
+}
 export function allowedContact(c, actorId, user) { return Boolean(c && (user?.isGM || c.grants?.includes(actorId))); }
-export function initialState() { return {schema:SCHEMA,revision:0,contacts:[],evidence:[],actors:{},processed:{},outbox:[],pending:[],calls:[],operations:[],dossiers:{},research:[],imports:{},guides:{}}; }
+export function initialState() { return {schema:SCHEMA,revision:0,contacts:[],evidence:[],actors:{},processed:{},outbox:[],pending:[],calls:[],operations:[],dossiers:{},research:[],imports:{},guides:{},archiveTransport:2}; }
 export function endpoint(state, actorId) { return {enabled:true,jammed:false,clearance:0,trace:0,masked:false,...state.actors[actorId]}; }
 export function assertOnline(state, actorId) {
   const e=endpoint(state,actorId);

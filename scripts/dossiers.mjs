@@ -1,6 +1,6 @@
-import {clone,text,unique,contactRecord,projectContact} from './domain.mjs';
+import {clone,text,unique,contactRecord,projectContact,owners,owns} from './domain.mjs';
 
-export const DOSSIER_VERSION=1;
+export const DOSSIER_VERSION=2;
 export const SCENE_RELEASES=[
   {id:'ward',name:'SC01 · Resurrection Ward',contacts:['C04'],evidence:['H01'],source:'G08'},
   {id:'breach',name:'SC02 · Recovery team',contacts:['C02'],evidence:['H02'],source:'G09'},
@@ -20,9 +20,10 @@ export function researchRecord(v,id) {
   if(!text(v.title,160).trim())throw new Error('Research needs a title.');
   return {id,title:text(v.title,160),body:text(v.body,24000),source:text(v.source,200),category:text(v.category||'Research',80),
     pcId:text(v.pcId,100),sourceId:text(v.sourceId,100),status:['confirmed','disputed','unverified','personal'].includes(v.status)?v.status:'unverified',
-    gmNotes:text(v.gmNotes,12000),revision:Math.max(1,Number(v.revision)||1)};
+    gmNotes:text(v.gmNotes,12000),revision:Math.max(1,Number(v.revision)||1),
+    ...(v.contact?{contact:{names:unique(v.contact.names),categories:unique(v.contact.categories),sleeves:unique(v.contact.sleeves)}}:{})};
 }
-export function projectResearch(r) { return {id:r.id,title:r.title,body:r.body,source:r.source,category:r.category,status:r.status,revision:r.revision}; }
+export function projectResearch(r) { return {id:r.id,title:r.title,body:r.body,source:r.source,category:r.category,status:r.status,revision:r.revision,...(r.contact?{contact:clone(r.contact)}:{})}; }
 const add=(list,record)=>{if(!list.some(r=>r.id===record.id))list.push(record);};
 function assignContact(d,id) { return d.contacts[id]??={historicalNames:[],categories:[],sleeves:[],disputed:false,identity:false,observedReveals:{}}; }
 export function researchGrant(d,id,starter=false) { return d.research[id]??={released:starter,delivery:'',silent:starter}; }
@@ -56,8 +57,10 @@ export function buildColdDossiers(state,data,plain) {
       a.recognitionClues=unique(rels.flatMap(r=>r.recognitionClues||[]));
       a.historyId=`cold:history:${p.id}:${cid}`;
       add(state.research,researchRecord({title:`${a.historicalNames.join(' / ')} · Relationship archive`,pcId:p.id,category:'Historical contacts',status:a.disputed?'disputed':'unverified',source:'Cold Storage / relationship archive',sourceId:`${p.id}:${cid}`,
+        contact:{names:a.historicalNames,categories:a.categories,sleeves:a.sleeves},
         body:rels.map(r=>`${r.continuityUnverified?'DISPUTED ARCHIVE CLAIM\n':''}${r.pcSleeveName} · ${r.category}\nHistorical name: ${r.contactHistoricalIdentity}\n${r.historicalIncident}`).join('\n\n')+'\n\nHistorical names and emotional familiarity do not prove who occupies a present-day sleeve. No present-day identity link is supplied by this file.'},a.historyId));
       researchGrant(d,a.historyId);
+      const file=state.research.find(r=>r.id===a.historyId);if(file&&!file.contact)file.contact={names:clone(a.historicalNames),categories:clone(a.categories),sleeves:clone(a.sleeves)};
     }
     for(const j of data.journals.filter(j=>j.visibility==='public'&&j.category==='primer')){
       const id=`cold:primer:${j.id}`;add(state.research,researchRecord({title:j.title,body:plain(j.body),category:'Reference library',source:'Cold Storage / player primer',sourceId:j.id,status:'confirmed'},id));researchGrant(d,id,true);
@@ -79,10 +82,12 @@ export function setContactRelease(state,d,contactId,mode) {
     if(!a.historyId)throw new Error('This contact has no historical relationship record.');
     researchGrant(d,a.historyId).released=true;
     delete d.research[a.historyId].deliverySuppressed;
+    d.research[a.historyId].deliveryPaused=false;
   }else if(mode==='verify'){
     if(!a.historicalNames.length)throw new Error('This contact has no authored historical identity link.');
     a.identity=true;a.current=true;if(a.historyId)researchGrant(d,a.historyId).released=true;
     if(a.historyId)delete d.research[a.historyId].deliverySuppressed;
+    if(a.historyId)d.research[a.historyId].deliveryPaused=false;
     if(d.actorId)c.grants=unique([...c.grants,d.actorId]);
   }else if(mode==='release'){
     a.current=true;a.autoPeer=false;if(d.actorId)c.grants=unique([...c.grants,d.actorId]);d.blockedPeers=d.blockedPeers.filter(id=>id!==c.id);
@@ -100,10 +105,12 @@ export function diagnosticReport(state,{actors,users,ready,authority,bytes,guide
     const candidates=d.sourceId?actors.filter(a=>a.type==='character'&&sourceId(a)===d.sourceId):[],actor=actors.find(a=>a.id===d.actorId);
     if(candidates.length>1){push('error',d.name,'Multiple actors carry the same Cold Storage source ID. Keep one authoritative PC actor.');continue;}
     if(!actor){push('warning',d.name,'Dossier prepared; waiting for the Cold Storage PC actor. Import the adventure or use Bind actor.');continue;}
-    const own=users.filter(u=>!u.isGM&&(actor.testUserPermission?.(u,'OWNER')??Number(actor.ownership?.[u.id]??actor.ownership?.default??0)>=3));
+    const ids=Array.isArray(d.recipientUserIds)?d.recipientUserIds:owners(actor,users),own=users.filter(u=>!u.isGM&&ids.includes(u.id)&&owns(actor,u));
     if(!own.length)push('warning',d.name,'No player owner; files stay prepared until a player is assigned.');
-    else if(own.some(u=>!u.getFlag?.('altered-carbon-oni','publicKey')?.kid))push('warning',d.name,`${own.filter(u=>!u.getFlag?.('altered-carbon-oni','publicKey')?.kid).map(u=>u.name).join(', ')} must connect once to initialize ONI. Delivery remains queued.`);
+    else if(own.some(u=>!u.getFlag?.('altered-carbon-oni','publicKey')?.kid))push('warning',d.name,`${own.filter(u=>!u.getFlag?.('altered-carbon-oni','publicKey')?.kid).map(u=>u.name).join(', ')} must connect once to initialize ONI. Released content is stored in this PC's archive; no file-by-file jobs are created.`);
     else push('ok',d.name,`${own.map(u=>u.name).join(', ')} · ${Object.values(d.research).filter(g=>g.released).length} research files released.`);
+    const pausedFiles=Object.values(d.research).filter(g=>g.released&&g.deliveryPaused).length;
+    if(d.archivePaused||pausedFiles)push('warning',`${d.name} · archive delivery paused`,`${pausedFiles} released files paused. Rebuild this PC’s released archive in PC dossiers when you want delivery to resume. Safe repair preserves cancellations.`);
   }
   push(bytes<550000?'ok':bytes<680000?'warning':'error','GM vault capacity',`${Math.round(bytes/1024)} KiB used; encrypted record limit is 700 KB. Research outbox jobs contain references, not duplicated archives.`);
   push(guideIds.length===2?'ok':'warning','In-world guides',guideIds.length===2?'Player guide and private GM guide are installed.':'Prepare / repair creates the missing guides.','prepare');
@@ -112,5 +119,5 @@ export function diagnosticReport(state,{actors,users,ready,authority,bytes,guide
   const stale=state.contacts.flatMap(c=>c.grants.filter(id=>!actors.some(a=>a.id===id)));
   if(stale.length)push('warning','Stale contact grants',`${stale.length} grants refer to deleted actors. Safe repairs remove these stale references.`, 'prepare');
   const failed=state.outbox.filter(o=>o.lastError);if(failed.length)push('warning','Delivery errors',`${failed.length} jobs had a failed delivery. Outbox shows the saved error; jobs remain available for retry.`);
-  return {version:'1.1.0',generatedAt:new Date().toISOString(),checks,summary:{errors:checks.filter(c=>c.level==='error').length,warnings:checks.filter(c=>c.level==='warning').length,preparedPCs:Object.keys(state.dossiers).length,researchFiles:state.research.length,queuedPackets:state.outbox.length}};
+  return {version:'1.2.0',generatedAt:new Date().toISOString(),checks,summary:{errors:checks.filter(c=>c.level==='error').length,warnings:checks.filter(c=>c.level==='warning').length,preparedPCs:Object.keys(state.dossiers).length,researchFiles:state.research.length,queuedPackets:state.outbox.length}};
 }

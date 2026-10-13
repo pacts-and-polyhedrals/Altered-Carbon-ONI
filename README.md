@@ -1,4 +1,4 @@
-# Altered Carbon — ONI 1.1.0
+# Altered Carbon — ONI 1.2.0
 
 A separate Foundry VTT module for **Altered Carbon RPG 2.4.9+**, targeting **Foundry 14**. It adds an eye button to the token control palette, an eye button on an owned token's HUD, and **Alt+O** to open a character's Optical Neural Interface.
 
@@ -14,6 +14,17 @@ Your system and Cold Storage installation remain separate. The ONI module uses t
 
 The manifest downloads the public repository's `main` ZIP. A GitHub release is not required for this installation route. Keep `module.json` at the repository root, and keep its `url`, `manifest` and `download` fields populated. The install manifest URL must remain visible in this README for every distributed version.
 
+## Updating a world affected by the 1.1.0 release bugs
+
+Version 1.2.0 fixes private recipient routing, missing contact sections, per-file outbox buildup, and lists jumping during background updates. Replace the module files with this release, restart Foundry and reload each browser. Existing endpoint keys and ONI world records remain usable. No Cold Storage reimport is needed.
+
+1. Open **GM control → PC dossiers → Anik Rao**. The header endpoint and dossier now stay aligned.
+2. Check **Private delivery**. Select Anik's actual player and click **Set private recipient** if needed. This selects one account and grants native actor ownership if missing.
+3. Click **Rebuild Anik Rao’s released archive**. It resumes only Anik's already released files, including files cancelled from the old outbox. It leaves every other PC's releases and cancellations intact. The player must have connected once and the endpoint must be connected.
+4. Find callable names in **Contacts → Current Channels**, released allies / enemies / rivals / loved ones in **Contacts → Previous Lives**, lifetime files in **Research**, and released handouts in **Evidence**.
+
+To reveal additional content, use **Release past lives & historical contacts to this PC**, individual release buttons, or **Release all current channels to this PC** deliberately. Rebuilding restores published content without revealing still-sealed files or verifying identities. Old undelivered per-file jobs are retired automatically. Ordinary messages, scheduled deliveries and calls retain their delivery jobs. The updated journals explain these controls in the world.
+
 ## What it includes
 
 - Individual PC inboxes with private notifications, unread counts, saved history and offline delivery.
@@ -25,7 +36,7 @@ The manifest downloads the public repository's `main` ZIP. A GitHub release is n
 - Nine scene / lead bundles for one-action contact and evidence releases, with a preview and per-PC duplicate prevention.
 - Automatic actor binding, teammate channels, ownership / key changes, and GM-authored Cold Storage relationship reveals.
 - In-world **ONI · Player Guide** and private **ONI · GM Operations Guide**, covering every interface section in 20 pages.
-- Diagnostics, specific outbox waiting reasons, and an additive **Prepare / repair** action.
+- Visible per-PC private recipients, archive status, targeted rebuild, stable expandable lists, diagnostics and additive **Prepare / repair**.
 - Incoming / outgoing audio and video call sessions with ringing, answer, decline, busy checks, missed calls, dialogue, shared visual files and hang-up.
 - Animated ONI iris, connection orbit, channel visualizer, incoming notices and file reveals. Optional tones, do-not-disturb and reduced-motion controls.
 - Text, image, recorded video, audio and document attachments.
@@ -43,7 +54,7 @@ The manifest downloads the public repository's `main` ZIP. A GitHub release is n
 1. Extract the installation ZIP. Place its `altered-carbon-oni` folder in your Foundry user-data `Data/modules/` directory.
 2. Restart Foundry, open your Altered Carbon world and enable **Altered Carbon — ONI** in **Manage Modules**.
 3. Connect using **HTTPS**, including your usual Forge URL, or `localhost`. The encrypted transport requires WebCrypto.
-4. Assign PCs to their Foundry users with Owner permission. Each player should connect once so ONI can register their private endpoint. Nothing is sent in plaintext when a key is missing; the packet waits in the GM outbox.
+4. Assign each user's Character and native Owner permission, or choose **Set private recipient** in PC dossiers. Broad default Owner permission is never treated as a party-wide private recipient list. Each player should connect once to register an endpoint. Released archives stay stored under their own PC until an eligible player initializes; no individual file jobs accumulate.
 5. Import Cold Storage normally. ONI automatically prepares all eight dossiers after import settles. Existing worlds are prepared when a GM connects. If needed, use **GM control → Prepare / repair Cold Storage**; no separate roster-sync step is required.
 6. Open **GM control → PC dossiers**. Choose a PC by name and release contacts or past-life files. **Scene releases** previews and releases a scene's discoveries to selected PCs in one action.
 7. Players open **Research** for their private card, continuity index and player reference library. Read the automatically installed **ONI · Player Guide** and **ONI · GM Operations Guide** using the Guide button or Journals sidebar.
@@ -53,18 +64,24 @@ The manifest installation above works from the public repository's main branch. 
 
 ## PC contacts and lifelong research
 
-Preparation assigns every authored historical relationship and potential adventure channel to the appropriate GM dossier. Each PC has its own list of NPCs, historical names, relationship roles and former sleeves. Live, owned teammates receive one another's channels automatically; reserve characters are not automatically presented as live teammates. Dossiers are prepared before their actors exist and retain releases while waiting for import or ownership.
+Preparation assigns every authored historical relationship and potential adventure channel to the appropriate GM dossier. Each PC has its own list of NPCs, historical names, relationship roles and former sleeves. Active imported teammates receive one another's channels automatically; reserve characters are not automatically presented as live teammates. Dossiers are prepared before their actors exist and retain releases while waiting for import or ownership. GM views show published content immediately, independently of player connection status; player views contain only privately delivered records.
 
 | GM action | What this PC receives |
 | --- | --- |
 | Release channel | The contact's current public card and callable / message address. |
-| Release history | This PC's historical relationship record without a current-sleeve identity link. |
+| Release history | This PC's historical relationship in Contacts → Previous Lives and Research, without a current-sleeve identity link. |
 | Verify identity link | An explicit connection between historical names and the current card, plus the related history file. |
 | Hide channel | Removes future directory access; already delivered knowledge remains in the archive. |
 | Release file | A selected past-life or custom research file. |
-| Release all past-life files | All prepared lifetime and historical relationship files for that PC, with disputed claims still labelled. |
+| Release past lives & historical contacts | All prepared lifetime and historical relationship files for this PC, with disputed claims still labelled. |
+| Release all current channels | All listed callable contact cards for this PC; historical identity links remain sealed. |
+| Rebuild released archive | Republish only this PC's released contacts, research and evidence; resume its cancelled archive deliveries. |
 
 The initial library contains a **private character card**, **continuity index** and **18 player-safe reference primers**. The full vault also holds 46 lifetime records and 97 per-PC historical-contact files grouping all 160 relationship links. Detailed histories are prepared and sealed for GM-controlled pacing. Historical memories do not automatically prove current identities, reveal NPC agendas, or grant skill bonuses.
+
+Player **Contacts** has separate **Current Channels** and **Previous Lives** views. Historical cards can be filtered by Allies, Enemies, Rivals or Loved ones and opened directly in Research. Expanded cards, scroll position, search focus and edited drafts survive incoming updates. Unchanged background cycles leave the DOM alone.
+
+Each PC's published library travels in one encrypted archive snapshot; one pending snapshot replaces older pending versions for that PC. Starter loads and ownership refreshes are silent. Deliberate releases notify that PC and open the relevant section. Missing keys leave content in the dossier. Off-grid or signal-blocked initialized endpoints hold one archive job until reconnection. Cancelling it pauses that PC's archive and survives repair; rebuild is the explicit way to resume.
 
 GM-authored reveals in the Cold Storage relationship dashboard synchronize with ONI. Familiar / suspected / hostile / reconciled entries publish the current channel; confirmed non-disputed entries also publish their history and identity link. Player-authored relationship updates do not trigger identity reveals. A deliberate ONI hide survives unchanged source states and reimport.
 
@@ -130,7 +147,7 @@ A new owner automatically receives the dossier's released research and directory
 
 - Built against the attached **Altered Carbon RPG 2.4.9**, **Cold Storage 1.9.0** and Foundry's documented v14 APIs.
 - Automated protocol, cryptography, permissions, delivery, call, recovery, rendering-output and system-effect contract checks are included.
-- A licensed live Foundry server and working browser renderer were not available for end-to-end validation. The manifest intentionally omits `compatibility.verified`.
+- Browser regressions run in real Chromium with native DOM, scrolling, forms and WebCrypto against simulated Foundry documents. They exercise actual Anik data and a second PC's private view. A licensed live Foundry server / Forge multiplayer session is still unavailable; the manifest intentionally omits `compatibility.verified`.
 - Complete the short [live validation guide](docs/live-validation.md) in a copy of your world before using it for a paid session. Especially check TokenHUD markup, whisper permission, ApplicationV2 form handling and two simultaneous browsers on your exact Foundry / Forge build.
 
 This is unofficial fan tooling. It contains original interface code and reads your existing adventure installation; it does not bundle the rulebook, the TV show's graphics, or the full Cold Storage adventure.
@@ -149,3 +166,13 @@ AC_SYSTEM_PATH=/absolute/path/to/Data/systems/altered-carbon-rpg AC_COLD_PATH=/a
 ```
 
 No npm packages are required by the module or its unit tests. [docs/API.md](docs/API.md) describes the macro API.
+
+For reproducible UI regressions, install optional development tools and run:
+
+```sh
+npm install --no-save --package-lock=false playwright
+npx playwright install chromium
+AC_COLD_PATH=/absolute/path/to/Cold-Storage-source node tests/browser/run.cjs
+```
+
+Set `ONI_CHROMIUM_EXECUTABLE` to use an existing Chromium, `ONI_PLAYWRIGHT_PATH` for an external Playwright installation, or `ONI_BROWSER_OUTPUT` for screenshots and the JSON result. These tools are not runtime dependencies and are excluded from the installation archive.
