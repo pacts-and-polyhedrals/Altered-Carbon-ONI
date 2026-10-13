@@ -1,0 +1,32 @@
+{
+  "module": "altered-carbon-oni",
+  "version": "1.0.0",
+  "date": "2026-10-12",
+  "system_source": "altered-carbon-rpg 2.4.9 supplied by user",
+  "adventure_source": "cold-storage 1.9.0 supplied by user",
+  "foundry_api_target": "14",
+  "syntax_validation": "passed, 8 ES modules",
+  "automated_tests": {
+    "passed": 40,
+    "failed": 0,
+    "skipped": 0
+  },
+  "coverage": [
+    "WebCrypto recipient isolation and tamper rejection",
+    "Actor ownership and role enforcement",
+    "GM-private projections for contact agendas and evidence truth",
+    "Encrypted outbox and missing-key / off-grid behavior",
+    "Replay / restart delivery deduplication",
+    "PC-to-PC and NPC call transitions, transcript and feed delivery",
+    "Evidence forwarding and per-PC directory revocation",
+    "Native skill activation contexts, equipped deck bonus and Depletion contract",
+    "Direct tests against actual supplied system ONI / masking effects",
+    "Power toggle restoration, delayed packets, co-GM takeover and world recovery",
+    "Static rendering of every player and GM panel, escaped content and player-role restrictions"
+  ],
+  "browser_rendering": "not completed; available Playwright install had no usable browser executable and browser download was empty",
+  "licensed_foundry_runtime": "not available",
+  "live_foundry_multiplayer": "not run",
+  "release_status": "implementation complete; native browser / Foundry v14 validation still required",
+  "verified_manifest_version": null
+}

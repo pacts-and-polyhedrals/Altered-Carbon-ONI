@@ -1,0 +1,8 @@
+{
+  "name": "altered-carbon-oni",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test tests/*.test.mjs", "check": "node scripts/validate.mjs"},
+  "engines": {"node": ">=20"}
+}

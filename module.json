@@ -1,0 +1,15 @@
+{
+  "id": "altered-carbon-oni",
+  "title": "Altered Carbon — ONI",
+  "description": "Private ONI contacts, calls, shared visual feeds, evidence, faction channels and GM-adjudicated netrunning for Altered Carbon RPG. Unofficial fan module.",
+  "version": "1.0.0",
+  "compatibility": {"minimum": "14"},
+  "authors": [{"name": "Pacts & Polyhedrals"}],
+  "esmodules": ["scripts/oni.mjs"],
+  "styles": ["styles/oni.css"],
+  "socket": false,
+  "relationships": {
+    "systems": [{"id": "altered-carbon-rpg", "type": "system", "compatibility": {"minimum": "2.4.9"}, "manifest": "https://github.com/pacts-and-polyhedrals/altered-carbon-rpg-foundry/releases/latest/download/system.json"}],
+    "recommends": [{"id": "cold-storage", "type": "module", "compatibility": {"minimum": "1.9.0"}, "manifest": "https://github.com/pacts-and-polyhedrals/altered-carbon-cold-storage/releases/latest/download/module.json"}]
+  }
+}
