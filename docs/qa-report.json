@@ -1,13 +1,13 @@
 {
   "module": "altered-carbon-oni",
-  "version": "1.0.0",
-  "date": "2026-10-12",
+  "version": "1.1.0",
+  "date": "2026-10-13",
   "system_source": "altered-carbon-rpg 2.4.9 supplied by user",
   "adventure_source": "cold-storage 1.9.0 supplied by user",
   "foundry_api_target": "14",
-  "syntax_validation": "passed, 8 ES modules",
+  "syntax_validation": "passed, 10 ES modules",
   "automated_tests": {
-    "passed": 40,
+    "passed": 65,
     "failed": 0,
     "skipped": 0
   },
@@ -22,11 +22,39 @@
     "Native skill activation contexts, equipped deck bonus and Depletion contract",
     "Direct tests against actual supplied system ONI / masking effects",
     "Power toggle restoration, delayed packets, co-GM takeover and world recovery",
-    "Static rendering of every player and GM panel, escaped content and player-role restrictions"
+    "Static rendering of every player and GM panel, escaped content and player-role restrictions",
+    "Automatic Cold Storage dossier preparation and actor binding",
+    "All supplied 160 links, 46 lifetimes and 177 research files",
+    "Independent channel / history / verified identity releases",
+    "Research recipient isolation, ownership changes, missing-key and off-grid delivery",
+    "Reimport preserves edits, custom notes, releases and explicit hides",
+    "Repeat-safe scene bundles and unbound reserve release intents",
+    "GM-authored relationship synchronization and player-update rejection",
+    "Dossier / research world recovery and batch-checkpoint crash deduplication",
+    "Native journal guide creation and permission data in a simulated document fixture",
+    "Cancellation, per-file unread notices, source reference jobs and vault capacity",
+    "Install manifest remains prominent in README and points to the real repository",
+    "Saved native delivery errors and retry without source-file duplication"
   ],
   "browser_rendering": "not completed; available Playwright install had no usable browser executable and browser download was empty",
   "licensed_foundry_runtime": "not available",
   "live_foundry_multiplayer": "not run",
   "release_status": "implementation complete; native browser / Foundry v14 validation still required",
-  "verified_manifest_version": null
+  "verified_manifest_version": null,
+  "source_coverage": {
+    "prepared_pcs": 8,
+    "historical_relationship_links": 160,
+    "lifetime_records": 46,
+    "disputed_lifetime_claims": 2,
+    "research_files": 177,
+    "scene_bundles": 9,
+    "player_guide_pages": 8,
+    "gm_guide_pages": 12
+  },
+  "archive_capacity": {
+    "stress_state_bytes": 491596,
+    "limit_bytes": 700000,
+    "research_delivery_intents": 303,
+    "file_bodies_duplicated_in_outbox": false
+  }
 }

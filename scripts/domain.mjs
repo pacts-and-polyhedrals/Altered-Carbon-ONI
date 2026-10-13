@@ -59,7 +59,7 @@ export function owns(actor, user) {
 }
 export function owners(actor, users) { return users.filter(u=>!u.isGM && owns(actor,u)).map(u=>u.id); }
 export function allowedContact(c, actorId, user) { return Boolean(c && (user?.isGM || c.grants?.includes(actorId))); }
-export function initialState() { return {schema:SCHEMA,revision:0,contacts:[],evidence:[],actors:{},processed:{},outbox:[],pending:[],calls:[],operations:[]}; }
+export function initialState() { return {schema:SCHEMA,revision:0,contacts:[],evidence:[],actors:{},processed:{},outbox:[],pending:[],calls:[],operations:[],dossiers:{},research:[],imports:{},guides:{}}; }
 export function endpoint(state, actorId) { return {enabled:true,jammed:false,clearance:0,trace:0,masked:false,...state.actors[actorId]}; }
 export function assertOnline(state, actorId) {
   const e=endpoint(state,actorId);

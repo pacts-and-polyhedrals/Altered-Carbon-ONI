@@ -1,19 +1,23 @@
 # Publish for GitHub / Forge installation
 
-The source ZIP has files at the repository root. The install ZIP has one `altered-carbon-oni/` folder for manual installation. Neither archive is split into batches.
+**Canonical install manifest:** [https://raw.githubusercontent.com/pacts-and-polyhedrals/Altered-Carbon-ONI/main/module.json](https://raw.githubusercontent.com/pacts-and-polyhedrals/Altered-Carbon-ONI/main/module.json)
 
-1. Create a GitHub repository, for example `altered-carbon-oni`, in your own account.
-2. Extract the **source ZIP**, and upload the extracted files / folders to the repository root. `module.json` must be at the root, beside `scripts`, `styles` and `templates`.
-3. Run the local release helper with your real repository name:
+The source ZIP contains the complete repository at its root. Extract it and upload its files and folders to the root of [Altered-Carbon-ONI](https://github.com/pacts-and-polyhedrals/Altered-Carbon-ONI), replacing the previous version. Keep `module.json` beside `scripts`, `styles`, `templates`, and `README.md`. Upload the extracted contents, not the ZIP as a repository file. No separate batches or GitHub release are required.
+
+The install ZIP contains one `altered-carbon-oni/` folder for manual installation. The manifest downloads GitHub's `main` archive by default. Keep the manifest URL visible near the top of the root README for every version.
+
+Build both archives locally:
 
 ```sh
-python3 publishing/build-release.py --repo YOUR-ACCOUNT/altered-carbon-oni --output ./release
+python3 publishing/build-release.py --repo pacts-and-polyhedrals/Altered-Carbon-ONI --source --output ./release
 ```
 
-4. Upload the helper's updated `module.json` back to the repository root before creating the release. Keep all other files in place.
-5. Create a GitHub release with tag `v1.0.0`. Attach the helper's `module.json` and `altered-carbon-oni-v1.0.0.zip` as release assets.
-6. Use the manifest URL written into that generated `module.json` for Foundry's **Install Module → Manifest URL**, or Forge's custom module installation.
+For an optional version-pinned GitHub release download:
 
-The helper adds real release URLs to a copy of the manifest and includes that manifest in the archive. It does not connect to GitHub, create a repository, publish content or modify your system / adventure package.
+```sh
+python3 publishing/build-release.py --repo pacts-and-polyhedrals/Altered-Carbon-ONI --release-download --source --output ./release
+```
 
-For future updates, change both `module.json.version` and `package.json.version`, rerun tests and the release helper, then attach the matching assets to the matching release tag. Foundry's automatic updater needs a genuinely hosted manifest / download pair.
+Create tag `v1.1.0` and attach the generated `altered-carbon-oni-v1.1.0.zip` before updating the root manifest to that generated copy. The canonical manifest URL remains the raw `main/module.json` URL; only `download` changes to the versioned release asset. The README still explains the install manifest at the top.
+
+The helper builds files without network access and does not publish to GitHub. For future updates, change the versions and documentation, run checks, build the archives and upload the complete matching source. A read-only GitHub connector cannot upload these changes.

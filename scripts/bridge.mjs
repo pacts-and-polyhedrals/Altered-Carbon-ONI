@@ -38,7 +38,8 @@ export async function operationRoll(actor,op,{difficulty=0,requestId=''}={}) {
 /** Route-aware paths, like the supplied Cold Storage system bridge. */
 export async function sourceJSON(name) {
   const cold=game.modules.get('cold-storage')?.active;
-  const base=cold?'../../cold-storage/content-src/':'../../../systems/altered-carbon-rpg/data/cold-storage/';
-  const url=new URL(`${base}${name}.json`,import.meta.url);
-  const r=await fetch(url);if(!r.ok)throw new Error(`Could not load ${name} from ${cold?'Cold Storage':'the system'} (${r.status}).`);return r.json();
+  const bases=[...(cold?['../../cold-storage/content-src/']:[]),'../../../systems/altered-carbon-rpg/data/cold-storage/'];
+  const errors=[];
+  for(const base of bases){try{const r=await fetch(new URL(`${base}${name}.json`,import.meta.url));if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json();}catch(e){errors.push(e.message);}}
+  throw new Error(`Could not load ${name} from the installed Cold Storage / system data: ${errors.join('; ')}. Update to Cold Storage 1.9.0 / Altered Carbon 2.4.9 or newer.`);
 }

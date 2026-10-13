@@ -6,7 +6,7 @@ export class ONIApplication extends api.HandlebarsApplicationMixin(api.Applicati
   static DEFAULT_OPTIONS={id:'altered-carbon-oni-hud',classes:['ac-oni-app'],window:{title:'ONI · Optical Neural Interface',icon:'fa-solid fa-eye'},position:{width:1120,height:790},actions:{act:this.onAction}};
   static PARTS={main:{template:'modules/altered-carbon-oni/templates/interface.hbs'}};
   constructor(runtime,{actorId}={}) {
-    super();this.runtime=runtime;this.actorId=actorId||this.initialActor();this.tab='inbox';this.gmSection='queue';this.drafts={};this.runtime.ui=this;
+    super();this.runtime=runtime;this.actorId=actorId||this.initialActor();this.tab=game.user.isGM?'gm':'inbox';this.gmSection='pcs';this.drafts={};this.runtime.ui=this;
   }
   initialActor() {
     const controlled=canvas?.tokens?.controlled?.find(t=>owns(t.actor,game.user))?.actor;
@@ -21,10 +21,17 @@ export class ONIApplication extends api.HandlebarsApplicationMixin(api.Applicati
       this.captureDrafts();this[which==='actor'?'actorId':which]=event.target.value;
       if(which==='actor'){this.selection='';this.contactId='';this.evidenceId='';}
       this.render({force:true});},opts);
+    this.element.addEventListener('input',event=>{
+      const which=event.target.dataset.oniFilter;if(!which)return;this[which]=event.target.value;
+      const caret=event.target.selectionStart;clearTimeout(this.filterTimer);this.filterTimer=setTimeout(async()=>{
+        this.captureDrafts();await this.render({force:true});const input=this.element.querySelector(`[data-oni-filter="${which}"]`);
+        if(input){input.focus();try{input.setSelectionRange(caret,caret);}catch{}}
+      },220);
+    },opts);
     this.element.addEventListener('focusout',()=>{if(this.pendingRefresh)setTimeout(()=>{if(!this.editing()){this.pendingRefresh=false;this.captureDrafts();this.render({force:true});}},50);},opts);
     this.restoreDrafts();
   }
-  draftKey(form) { return `${this.actorId}:${this.tab}:${this.gmSection}:${form.dataset.oniForm}:${form.querySelector('[name="id"],[name="contactId"],[name="requestId"],[name="callId"]')?.value||''}`; }
+  draftKey(form) { return `${this.actorId}:${this.tab}:${this.gmSection}:${form.dataset.oniForm}:${form.querySelector('[name="id"],[name="contactId"],[name="requestId"],[name="callId"],[name="dossierId"],[name="sceneId"]')?.value||''}`; }
   captureDrafts() {
     for(const f of this.element?.querySelectorAll('[data-oni-form]')||[]){const fields=[];
       for(const e of f.elements){if(!e.name||['file','hidden','submit'].includes(e.type))continue;fields.push({name:e.name,type:e.type,value:e.value,checked:e.checked});}
@@ -49,7 +56,23 @@ export class ONIApplication extends api.HandlebarsApplicationMixin(api.Applicati
     else if(op==='read'){await r.markRead(id);}
     else if(op==='read-all'){const ids=r.packets(this.actorId).map(p=>p.id),old=game.user.getFlag(ID,'readIds')||[];await game.user.setFlag(ID,'readIds',[...new Set([...ids,...old])].slice(0,1500));}
     else if(op==='contact'){this.contactId=id;}
-    else if(op==='evidence'){this.tab='evidence';this.evidenceId=id;}
+    else if(op==='evidence'){this.tab='evidence';this.evidenceId=id;await r.markFileRead(this.actorId,'evidence',id);}
+    else if(op==='research'){this.tab='research';this.researchId=id;await r.markFileRead(this.actorId,'research',id);}
+    else if(op==='new-note'){this.tab='research';this.newNote=!this.newNote;}
+    else if(op==='save-research'){await r.request('research-note',{actorId:this.actorId,packetId:id});ui.notifications.info('Transmission saved to this PC’s research archive.');}
+    else if(['release-channel','hide-channel','release-history','verify-contact'].includes(op)){
+      await r.request('contact-release',{...JSON.parse(id),mode:{'release-channel':'release','hide-channel':'hide','release-history':'history','verify-contact':'verify'}[op]});
+    }
+    else if(op==='release-research'){await r.request('research-release',JSON.parse(id));}
+    else if(op==='release-lifetimes'){await r.request(op,{dossierId:id});}
+    else if(op==='edit-research'){this.tab='gm';this.gmSection='research';this.editResearchId=id;}
+    else if(op==='new-research'){this.editResearchId='';delete this.drafts[`${this.actorId}:gm:research:research-save:`];}
+    else if(op==='guide'){
+      const journal=game.journal?.find(j=>j.getFlag?.(ID,'guide')===(game.user.isGM?'gm':'player'));
+      if(journal)await journal.sheet.render({force:true});else ui.notifications.info('The ONI guides are created when a GM prepares this world.');
+    }
+    else if(op==='repair'){await r.request(op);ui.notifications.info('ONI preparation and safe repairs queued.');}
+    else if(op==='diagnostics-export'){foundry.utils.saveDataToFile(JSON.stringify(r.diagnostics(),null,2),'application/json',`ONI-diagnostics-${game.world.id}.json`);}
     else if(op==='analyze'){await r.request('operation',{actorId:this.actorId,op:'analyze',evidenceId:id,body:'Inspect authenticity, provenance and relevant details.'});ui.notifications.info('ONI analysis request queued.');}
     else if(op==='power'){await r.request('power',{actorId:this.actorId,enabled:!r.directory(this.actorId).endpoint.enabled});}
     else if(['answer','decline','hangup'].includes(op)){await r.request('call-action',{actorId:this.actorId,callId:id,action:op==='answer'?'accept':op});}
@@ -59,7 +82,7 @@ export class ONIApplication extends api.HandlebarsApplicationMixin(api.Applicati
     else if(op==='new-evidence'){this.editEvidenceId='';delete this.drafts[`${this.actorId}:gm:evidence:evidence-save:`];}
     else if(op==='edit-contact'){this.editContactId=id;}
     else if(op==='edit-evidence'){this.editEvidenceId=id;}
-    else if(op==='import-cold'){await r.request(op);ui.notifications.info('Cold Storage import requested. Entries remain GM-only until released.');}
+    else if(op==='import-cold'){await r.request(op);ui.notifications.info('Cold Storage dossiers and research preparation queued.');}
     else if(op==='sync-roster'){await r.request(op);ui.notifications.info('PC roster sync requested.');}
     else if(op==='cancel-job'){await r.request(op,{id});}
     else if(op==='remove-contact'||op==='remove-evidence'){
@@ -72,9 +95,9 @@ export class ONIApplication extends api.HandlebarsApplicationMixin(api.Applicati
   }
   async submit(form) {
     this.captureDrafts();const r=this.runtime,kind=form.dataset.oniForm,fd=new FormData(form),d=Object.fromEntries(fd.entries());
-    d.actorIds=fd.getAll('actorIds');d.grants=d.actorIds;d.actorId=d.actorId||this.actorId;
+    d.actorIds=fd.getAll('actorIds');d.dossierIds=fd.getAll('dossierIds');d.grants=d.actorIds;d.actorId=d.actorId||this.actorId;
     d.media={type:d.mediaType||'image',path:d.mediaPath||'',caption:d.mediaCaption||''};
-    for(const k of ['manual','jammed','masked'])d[k]=fd.has(k);
+    for(const k of ['manual','jammed','masked','release'])d[k]=fd.has(k);
     if(kind==='preferences'){for(const k of ['sound','dnd','reduceMotion'])await game.settings.set(ID,k,fd.has(k));}
     else if(kind==='key-import'){
       const file=fd.get('file');if(!file?.size)throw new Error('Choose your ONI endpoint backup.');if(file.size>50000)throw new Error('Not an ONI endpoint key file.');
@@ -91,7 +114,8 @@ export class ONIApplication extends api.HandlebarsApplicationMixin(api.Applicati
       await r.request('evidence-save',{title:page.name,body:plainHandout(page.text.content),source:page.parent.name,media:{},gmNotes:`Copied from ${page.uuid}. Hidden secret sections excluded; review before delivery.`});
     }else {
       if(kind==='dispatch'){const minutes=Number(d.delayMinutes)||0;d.deliverAt=minutes>0?Date.now()+Math.max(0,Math.min(10080,minutes))*60000:0;}
-      await r.request(kind,d);ui.notifications.info('ONI request saved.');
+      await r.request(kind,d);ui.notifications.info(kind==='scene-release'?'Scene discoveries queued for the selected PCs.':'ONI request saved.');
+      if(kind==='research-note')this.newNote=false;
     }
     delete this.drafts[this.draftKey(form)];await r.schedule();this.render({force:true});
   }
@@ -101,7 +125,7 @@ export class ONIApplication extends api.HandlebarsApplicationMixin(api.Applicati
     const holder=document.querySelector('#ac-oni-notifications')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'ac-oni-notifications'}));
     const toast=document.createElement('button');toast.type='button';toast.className=`oni-toast ${data.type==='call'?'call':''}`;
     toast.innerHTML=`<span class="oni-toast-symbol"><i class="fa-solid ${data.type==='call'?'fa-phone':'fa-eye'}"></i></span><span><small>ONI / ${esc(data.from?.name||'PRIVATE CHANNEL')}</small><b>${esc(data.title)}</b><em>Open transmission</em></span>`;
-    toast.addEventListener('click',()=>{const target=p.actorIds.find(id=>owns(game.actors.get(id),game.user));if(target)this.actorId=target;this.tab=p.kind==='request'?'gm':data.type==='call'?'calls':'inbox';if(p.kind==='request'){this.gmSection='queue';this.requestId=record.id;}this.selection=record.id;this.render({force:true});rMark(this.runtime,record.id);toast.remove();});
+    toast.addEventListener('click',()=>{const target=p.actorIds.find(id=>owns(game.actors.get(id),game.user));if(target)this.actorId=target;this.tab=p.kind==='request'?'gm':data.type==='call'?'calls':data.research?'research':data.evidence?'evidence':'inbox';if(data.research)this.researchId=data.research.id;if(data.evidence)this.evidenceId=data.evidence.id;if(p.kind==='request'){this.gmSection='queue';this.requestId=record.id;}this.selection=record.id;this.render({force:true});rMark(this.runtime,record.id);toast.remove();});
     holder.appendChild(toast);while(holder.children.length>3)holder.firstChild.remove();setTimeout(()=>toast.remove(),16000);
     if(game.settings.get(ID,'sound'))tone();
   }

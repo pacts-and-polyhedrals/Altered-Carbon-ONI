@@ -1,4 +1,4 @@
-# Altered Carbon — ONI 1.0.0
+# Altered Carbon — ONI 1.1.0
 
 A separate Foundry VTT module for **Altered Carbon RPG 2.4.9+**, targeting **Foundry 14**. It adds an eye button to the token control palette, an eye button on an owned token's HUD, and **Alt+O** to open a character's Optical Neural Interface.
 
@@ -19,6 +19,13 @@ The manifest downloads the public repository's `main` ZIP. A GitHub release is n
 - Individual PC inboxes with private notifications, unread counts, saved history and offline delivery.
 - Contacts, PCs, benefactors, factions, AI identities and service / database endpoints.
 - A GM directory with per-PC grants, availability, clearance, difficulty and private agendas.
+- Automatic preparation of **all eight Cold Storage PC dossiers**, including 160 relationship links, 46 lifetime records and **177 research files**. Unowned and reserve PCs retain their assignments.
+- Named per-PC contact lists with **Release channel**, **Release history**, **Verify identity link** and **Hide channel** controls, searchable lifetime files and bulk release.
+- A player **Research** archive with private briefings, continuity indexes, reference primers, recovered lifetimes, historical relationships, personal notes and saved transmissions.
+- Nine scene / lead bundles for one-action contact and evidence releases, with a preview and per-PC duplicate prevention.
+- Automatic actor binding, teammate channels, ownership / key changes, and GM-authored Cold Storage relationship reveals.
+- In-world **ONI · Player Guide** and private **ONI · GM Operations Guide**, covering every interface section in 20 pages.
+- Diagnostics, specific outbox waiting reasons, and an additive **Prepare / repair** action.
 - Incoming / outgoing audio and video call sessions with ringing, answer, decline, busy checks, missed calls, dialogue, shared visual files and hang-up.
 - Animated ONI iris, connection orbit, channel visualizer, incoming notices and file reveals. Optional tones, do-not-disturb and reduced-motion controls.
 - Text, image, recorded video, audio and document attachments.
@@ -26,7 +33,7 @@ The manifest downloads the public repository's `main` ZIP. A GitHub release is n
 - GM roleplay as a selected contact; targeted broadcasts; delayed messages and evidence.
 - Authorized network searches, history, navigation, evidence analysis, intrusion, identity masking and tracing.
 - Signal blocking, off-grid operation, clearance grants and an optional six-segment trace clock.
-- Import of 20 Cold Storage contacts, six factions, three benefactors and 16 handouts. Six additional service templates are newly authored for this module.
+- Import of 20 Cold Storage NPC contacts, six factions, three benefactors, Marlowe's Anansi House channel and 16 handouts. Six additional service templates are newly authored for this module.
 - Browser endpoint-key backups and GM world-data export / recovery.
 
 **Calls are tabletop call sessions.** The module does not replace Discord or Foundry voice/video. The shared-sight feature transmits a scene image, recording or uploaded clip. It does not open a webcam, stream a player's desktop, or mirror the Foundry canvas.
@@ -37,16 +44,44 @@ The manifest downloads the public repository's `main` ZIP. A GitHub release is n
 2. Restart Foundry, open your Altered Carbon world and enable **Altered Carbon — ONI** in **Manage Modules**.
 3. Connect using **HTTPS**, including your usual Forge URL, or `localhost`. The encrypted transport requires WebCrypto.
 4. Assign PCs to their Foundry users with Owner permission. Each player should connect once so ONI can register their private endpoint. Nothing is sent in plaintext when a key is missing; the packet waits in the GM outbox.
-5. Open ONI with the eye button. In **GM control**, click **Import Cold Storage**, then **Sync PC roster**.
-6. In **GM control → contacts**, edit each NPC / faction / service you want available, check the recipient PCs and choose **Save & publish selected grants**.
-7. Each user should download **Endpoint → Download endpoint key backup** and keep it privately with their other backups.
+5. Import Cold Storage normally. ONI automatically prepares all eight dossiers after import settles. Existing worlds are prepared when a GM connects. If needed, use **GM control → Prepare / repair Cold Storage**; no separate roster-sync step is required.
+6. Open **GM control → PC dossiers**. Choose a PC by name and release contacts or past-life files. **Scene releases** previews and releases a scene's discoveries to selected PCs in one action.
+7. Players open **Research** for their private card, continuity index and player reference library. Read the automatically installed **ONI · Player Guide** and **ONI · GM Operations Guide** using the Guide button or Journals sidebar.
+8. Each user should download **Endpoint → Download endpoint key backup** and keep it privately with their other backups.
 
 The manifest installation above works from the public repository's main branch. The optional [release publishing guide](publishing/README.md) describes version-pinned release archives.
 
+## PC contacts and lifelong research
+
+Preparation assigns every authored historical relationship and potential adventure channel to the appropriate GM dossier. Each PC has its own list of NPCs, historical names, relationship roles and former sleeves. Live, owned teammates receive one another's channels automatically; reserve characters are not automatically presented as live teammates. Dossiers are prepared before their actors exist and retain releases while waiting for import or ownership.
+
+| GM action | What this PC receives |
+| --- | --- |
+| Release channel | The contact's current public card and callable / message address. |
+| Release history | This PC's historical relationship record without a current-sleeve identity link. |
+| Verify identity link | An explicit connection between historical names and the current card, plus the related history file. |
+| Hide channel | Removes future directory access; already delivered knowledge remains in the archive. |
+| Release file | A selected past-life or custom research file. |
+| Release all past-life files | All prepared lifetime and historical relationship files for that PC, with disputed claims still labelled. |
+
+The initial library contains a **private character card**, **continuity index** and **18 player-safe reference primers**. The full vault also holds 46 lifetime records and 97 per-PC historical-contact files grouping all 160 relationship links. Detailed histories are prepared and sealed for GM-controlled pacing. Historical memories do not automatically prove current identities, reveal NPC agendas, or grant skill bonuses.
+
+GM-authored reveals in the Cold Storage relationship dashboard synchronize with ONI. Familiar / suspected / hostile / reconciled entries publish the current channel; confirmed non-disputed entries also publish their history and identity link. Player-authored relationship updates do not trigger identity reveals. A deliberate ONI hide survives unchanged source states and reimport.
+
+Use **GM control → Research** to create and assign additional knowledge from previous lives or your campaign. Players can make private PC notes and save inbox / network replies to Research. Import preserves existing ONI notes, edited file bodies, grants, verified links and delivery receipts. It reads installed source data and does not create actors or overwrite their sheets.
+
+## Scene releases and diagnostics
+
+**GM control → Scene releases** includes Ward, Recovery team, Rainline, Quiet Archive, Blue Lotus, Relay Seventeen, Anansi House, Virtuality and Spire / council bundles. Choose recipients and review the exact contact and handout list before releasing. Each bundle is delivered once per selected PC. Bundles do not verify identities, activate Fray, or require a particular adventure route.
+
+**Diagnostics** reports actor bindings, duplicate source IDs, ownership, missing endpoint keys, guides, source counts, missing research and vault capacity. **Outbox** shows each packet's actual waiting reason. **Prepare / repair** adds missing source files and guides, rebinds unique source actors, removes grants to deleted actors, republishes directories and queues released research. Use Bind actor for a copied or custom PC. Ownership and missing private keys still require the appropriate user or GM to act.
+
+Archive delivery uses small file references and batched encrypted checkpoints. Starter-library deliveries are silent; manual knowledge releases generate notifications. Repeating import, scene release or reconnect does not duplicate a delivered source-file revision. See [the diagnostics report](docs/diagnostics.md) for findings and source coverage.
+
 ## First transmission
 
-1. **GM control → evidence:** create an evidence record with player-visible title, source, text and optional media. Put its actual meaning and truth classification in the GM fields.
-2. **GM control → dispatch:** choose a sender, recipient PCs, subject and message. Attach the evidence and transmit.
+1. **GM control → Evidence vault:** create an evidence record with player-visible title, source, text and optional media. Put its actual meaning and truth classification in the GM fields.
+2. **GM control → Send:** choose a sender, recipient PCs, subject and message. Attach the evidence and transmit.
 3. The chosen players receive an ONI notification and the file appears in their character's Inbox and Evidence tabs. Other players cannot decrypt that delivery.
 4. Players can forward received evidence to released PC channels. They cannot forward an undiscovered GM-vault record.
 
@@ -54,7 +89,7 @@ The manifest installation above works from the public repository's main branch. 
 
 Players select a channel in **Directory**, choose message / audio call / video call / service, and transmit. PC-to-PC messages and calls are routed to the target PC's owners. NPC, faction and service enquiries arrive in the GM's private queue.
 
-The GM can answer a PC's outgoing call from **GM control → queue**, or start an incoming call from **dispatch**. In **GM control → calls**, speak as the contact and send visual files. The participant view is **Calls & sight**.
+The GM can answer a PC's outgoing call from **GM control → Queue**, or start an incoming call from **Send**. In **GM control → Live calls**, speak as the contact and send visual files. The participant view is **Calls & sight**.
 
 One scripted call per PC is supported. For a group call, the first receiver's answer connects the group; a participant ending the call ends that scripted session. Ringing expires after the configured timeout. Delayed delivery applies to messages and files; calls start immediately.
 
@@ -89,7 +124,7 @@ The GM vault is encrypted for registered GMs. Public contacts and evidence are p
 
 ONI history and the encrypted vault are stored in world ChatMessages, hidden from the normal chat display. **Do not clear the world's chat archive while using ONI.** Export ONI world data first, and retain a normal Foundry world backup. Endpoint keys and world-data exports are different backups; retain both.
 
-A new owner can receive newly issued records; removing ownership does not make previously revealed information unknowable. Shared media paths are encrypted in the ONI packet, but the media file itself is still served by Foundry / Forge or its external host. This module does not add access control to that file server. Masked identity is a tabletop state, not anonymous Foundry-account networking.
+A new owner automatically receives the dossier's released research and directory; removing ownership does not make previously revealed information unknowable. Shared media paths are encrypted in the ONI packet, but the media file itself is still served by Foundry / Forge or its external host. This module does not add access control to that file server. Masked identity is a tabletop state, not anonymous Foundry-account networking.
 
 ## Compatibility and validation
 
@@ -107,10 +142,10 @@ node scripts/validate.mjs
 node --test tests/*.test.mjs
 ```
 
-For the two additional checks against your installed system:
+For the additional contracts against your installed system and Cold Storage source repository:
 
 ```sh
-AC_SYSTEM_PATH=/absolute/path/to/Data/systems/altered-carbon-rpg node --test tests/*.test.mjs
+AC_SYSTEM_PATH=/absolute/path/to/Data/systems/altered-carbon-rpg AC_COLD_PATH=/absolute/path/to/Cold-Storage-source node --test tests/*.test.mjs
 ```
 
 No npm packages are required by the module or its unit tests. [docs/API.md](docs/API.md) describes the macro API.

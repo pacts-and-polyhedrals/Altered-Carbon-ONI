@@ -1,8 +1,8 @@
 {
   "id": "altered-carbon-oni",
-  "title": "Altered Carbon — ONI",
-  "description": "Private ONI contacts, calls, shared visual feeds, evidence, faction channels and GM-adjudicated netrunning for Altered Carbon RPG. Unofficial fan module.",
-  "version": "1.0.0",
+  "title": "Altered Carbon \u2014 ONI",
+  "description": "Private ONI contacts, lifelong research archives, automated Cold Storage PC dossiers, staged GM releases, calls, evidence and native netrunning for Altered Carbon RPG. Unofficial fan module.",
+  "version": "1.1.0",
   "compatibility": {
     "minimum": "14"
   },
