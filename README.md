@@ -4,6 +4,16 @@ A separate Foundry VTT module for **Altered Carbon RPG 2.4.9+**, targeting **Fou
 
 Your system and Cold Storage installation remain separate. The ONI module uses the supplied system's skill checks, implant effects, deck bonuses and deck Depletion. Cold Storage is optional; its data is also present in your 2.4.9 system.
 
+## Install manifest — Foundry / Forge
+
+**Manifest URL:** [https://raw.githubusercontent.com/pacts-and-polyhedrals/Altered-Carbon-ONI/main/module.json](https://raw.githubusercontent.com/pacts-and-polyhedrals/Altered-Carbon-ONI/main/module.json)
+
+1. In Foundry Setup, open **Add-on Modules → Install Module**; on Forge, use **Install from Manifest**.
+2. Paste the manifest URL above into **Manifest URL**, then choose **Install**.
+3. Open your Altered Carbon world and enable **Altered Carbon — ONI** in **Manage Modules**.
+
+The manifest downloads the public repository's `main` ZIP. A GitHub release is not required for this installation route. Keep `module.json` at the repository root, and keep its `url`, `manifest` and `download` fields populated. The install manifest URL must remain visible in this README for every distributed version.
+
 ## What it includes
 
 - Individual PC inboxes with private notifications, unread counts, saved history and offline delivery.
@@ -21,7 +31,7 @@ Your system and Cold Storage installation remain separate. The ONI module uses t
 
 **Calls are tabletop call sessions.** The module does not replace Discord or Foundry voice/video. The shared-sight feature transmits a scene image, recording or uploaded clip. It does not open a webcam, stream a player's desktop, or mirror the Foundry canvas.
 
-## Install
+## Manual installation and first-world setup
 
 1. Extract the installation ZIP. Place its `altered-carbon-oni` folder in your Foundry user-data `Data/modules/` directory.
 2. Restart Foundry, open your Altered Carbon world and enable **Altered Carbon — ONI** in **Manage Modules**.
@@ -31,7 +41,7 @@ Your system and Cold Storage installation remain separate. The ONI module uses t
 6. In **GM control → contacts**, edit each NPC / faction / service you want available, check the recipient PCs and choose **Save & publish selected grants**.
 7. Each user should download **Endpoint → Download endpoint key backup** and keep it privately with their other backups.
 
-For Forge or manifest installation, publish the included source to a GitHub release first; see [publishing/README.md](publishing/README.md). This ZIP does not claim a hosted manifest URL that has not been published.
+The manifest installation above works from the public repository's main branch. The optional [release publishing guide](publishing/README.md) describes version-pinned release archives.
 
 ## First transmission
 
